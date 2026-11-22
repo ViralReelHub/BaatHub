@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BaatHub - Doston aur Naye Logon se Free Live Chat Karein</title>
+  <meta name="description" content="BaatHub par apne doston ke saath private room banayein ya naye aur anjaan logon se turant live baat karein. Fast, safe aur free online chatting website." />
+  <meta name="keywords" content="online chat, talk to strangers, friend chat room, free live chat india" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="navbar">
+    <div class="logo">BaatHub<span>.in</span></div>
+    <button id="vipBtn" class="vip-btn">Go VIP (Ad-Free)</button>
+  </header>
+
+  <!-- Monetization Slot 1: Top Google AdSense Banner -->
+  <div class="ad-banner">
+    <!-- AdSense approve hone ke baad apna Google Ad code yahan paste karein -->
+    <span>Advertisement Space (728x90 / Responsive Ad)</span>
+  </div>
+
+  <main class="container">
+    <!-- LOBBY SCREEN -->
+    <section id="lobbySection" class="lobby">
+      <h1>Apne Doston ya Naye Logon se Live Baat Karein</h1>
+      <p class="subtitle">Bina kisi jhanjhat ke turant chatting shuru karein.</p>
+
+      <div class="name-box">
+        <label for="usernameInput">Aapka Naam (Nickname):</label>
+        <input type="text" id="usernameInput" placeholder="Jaise: Rahul, Priya, ya Guest..." maxlength="20" />
+      </div>
+
+      <div class="cards">
+        <!-- Option 1: Stranger Chat -->
+        <div class="card">
+          <h2>Random Stranger Chat</h2>
+          <p>Kisi bhi naye aur anjaan vyakti se 1-on-1 live baat karein.</p>
+          <button id="randomChatBtn" class="primary-btn">Random Chat Shuru Karein</button>
+        </div>
+
+        <!-- Option 2: Friend Private Room -->
+        <div class="card">
+          <h2>Friend Private Room</h2>
+          <p>Apna room code banayein aur doston ko share karke group chat karein.</p>
+          <input type="text" id="roomCodeInput" placeholder="Room Code (jaise: DOST123)" maxlength="15" />
+          <button id="privateChatBtn" class="secondary-btn">Room Join / Create Karein</button>
+        </div>
+      </div>
+
+      <!-- Google Search aur AdSense Approval ke liye Content Section -->
+      <article class="seo-info">
+        <h3>BaatHub Kaise Kaam Karta Hai?</h3>
+        <p>BaatHub ek modern real-time messaging platform hai jahan aap do tareekon se baat kar sakte hain. Agar aap naye dost banana chahte hain, toh <strong>Random Stranger Chat</strong> chunein. Agar aap apne college ya office ke doston ke saath baat karna chahte hain, toh ek custom code daalkar <strong>Private Room</strong> banayein.</p>
+        <h3>Safety aur Rules</h3>
+        <p>Sabhi users se anurodh hai ki sabhyata banaye rakhein. Kisi bhi galat vyavahar par aap turant <strong>Next / Leave</strong> button dabakar chat chhod sakte hain.</p>
+      </article>
+    </section>
+
+    <!-- CHAT SCREEN -->
+    <section id="chatSection" class="chat-box hidden">
+      <div class="chat-header">
+        <div>
+          <strong id="chatTitle">Connecting...</strong>
+          <small id="typingStatus"></small>
+        </div>
+        <div class="chat-actions">
+          <button id="copyRoomBtn" class="small-btn hidden">Copy Code</button>
+          <button id="nextStrangerBtn" class="small-btn hidden">Next Stranger</button>
+          <button id="leaveChatBtn" class="danger-btn">Leave</button>
+        </div>
+      </div>
+
+      <div id="messagesContainer" class="messages"></div>
+
+      <form id="messageForm" class="message-form">
+        <input type="text" id="messageInput" placeholder="Apna message likhein..." autocomplete="off" required />
+        <button type="submit" class="primary-btn">Send</button>
+      </form>
+    </section>
+  </main>
+
+  <!-- Monetization Slot 2: Bottom Ad Banner -->
+  <div class="ad-banner">
+    <span>Advertisement Space (Google AdSense / Affiliate Banner)</span>
+  </div>
+
+  <!-- VIP Subscription Modal (Paid Monetization) -->
+  <div id="vipModal" class="modal hidden">
+    <div class="modal-content">
+      <h2>BaatHub VIP Membership</h2>
+      <ul>
+        <li>100% Ad-Free Chatting Experience</li>
+        <li>VIP Golden Badge aapke naam ke saath</li>
+        <li>Priority Fast Stranger Matching</li>
+      </ul>
+      <p class="price">Sirf ₹99 / Mahina</p>
+      <!-- Yahan aap Razorpay Payment Link ya Checkout Button lagayenge -->
+      <button id="payVipBtn" class="primary-btn">Abhi Upgrade Karein</button>
+      <button id="closeVipBtn" class="small-btn">Band Karein</button>
+    </div>
+  </div>
+
+  <footer>
+    <a href="/privacy">Privacy Policy</a> |
+    <a href="/terms">Terms & Conditions</a>
+    <p>&copy; 2026 BaatHub. All rights reserved.</p>
+  </footer>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
