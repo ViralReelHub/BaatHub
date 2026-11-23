@@ -5,12 +5,35 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { maxHttpBufferSize: 5e6, pingTimeout: 60000, pingInterval: 25000 });
+const io = new Server(server, { maxHttpBufferSize: 10e6, pingTimeout: 60000, pingInterval: 25000 });
 
 const extraKeys = [];
-const realGirlPics = ['https://randomuser.me/api/portraits/women/44.jpg','https://randomuser.me/api/portraits/women/65.jpg','https://randomuser.me/api/portraits/women/68.jpg','https://randomuser.me/api/portraits/women/12.jpg','https://randomuser.me/api/portraits/women/26.jpg','https://randomuser.me/api/portraits/women/33.jpg','https://randomuser.me/api/portraits/women/50.jpg','https://randomuser.me/api/portraits/women/79.jpg','https://randomuser.me/api/portraits/women/85.jpg','https://randomuser.me/api/portraits/women/90.jpg'];
-const realBoyPics = ['https://randomuser.me/api/portraits/men/32.jpg','https://randomuser.me/api/portraits/men/45.jpg','https://randomuser.me/api/portraits/men/22.jpg','https://randomuser.me/api/portraits/men/11.jpg','https://randomuser.me/api/portraits/men/54.jpg','https://randomuser.me/api/portraits/men/67.jpg'];
-const realGifs = ['https://media.giphy.com/media/3o7abKhOpu0NwenH3O/giphy.gif','https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif','https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif','https://media.giphy.com/media/3oriO0OEd9QIDdllqo/giphy.gif'];
+const realGirlPics = [
+  'https://randomuser.me/api/portraits/women/44.jpg',
+  'https://randomuser.me/api/portraits/women/65.jpg',
+  'https://randomuser.me/api/portraits/women/68.jpg',
+  'https://randomuser.me/api/portraits/women/12.jpg',
+  'https://randomuser.me/api/portraits/women/26.jpg',
+  'https://randomuser.me/api/portraits/women/33.jpg',
+  'https://randomuser.me/api/portraits/women/50.jpg',
+  'https://randomuser.me/api/portraits/women/79.jpg',
+  'https://randomuser.me/api/portraits/women/85.jpg',
+  'https://randomuser.me/api/portraits/women/90.jpg'
+];
+const realBoyPics = [
+  'https://randomuser.me/api/portraits/men/32.jpg',
+  'https://randomuser.me/api/portraits/men/45.jpg',
+  'https://randomuser.me/api/portraits/men/22.jpg',
+  'https://randomuser.me/api/portraits/men/11.jpg',
+  'https://randomuser.me/api/portraits/men/54.jpg',
+  'https://randomuser.me/api/portraits/men/67.jpg'
+];
+const realGifs = [
+  'https://media.giphy.com/media/3o7abKhOpu0NwenH3O/giphy.gif',
+  'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif',
+  'https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif',
+  'https://media.giphy.com/media/3oriO0OEd9QIDdllqo/giphy.gif'
+];
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/privacy', (req, res) => res.send('<h1>Privacy Policy - BaatHub</h1><a href="/">Back</a>'));
@@ -27,8 +50,14 @@ async function tryCall(m, key, sys, contents) {
   try {
     const ctrl = new AbortController(), t = setTimeout(() => ctrl.abort(), 8500);
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal,
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: sys }] }, contents, generationConfig: { temperature: 0.95, maxOutputTokens: 220 } })
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: ctrl.signal,
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: sys }] },
+        contents,
+        generationConfig: { temperature: 0.95, maxOutputTokens: 220 }
+      })
     });
     clearTimeout(t);
     const d = await r.json();
@@ -45,17 +74,23 @@ async function tryCall(m, key, sys, contents) {
 async function callAI(sys, contents) {
   const keys = getAllKeys();
   if (!keys.length) return null;
-  if (activeModel) { for (const k of keys) { const ok = await tryCall(activeModel, k, sys, contents); if (ok) return ok; } activeModel = null; }
+  if (activeModel) {
+    for (const k of keys) {
+      const ok = await tryCall(activeModel, k, sys, contents);
+      if (ok) return ok;
+    }
+    activeModel = null;
+  }
   for (const k of keys) {
     if (!discoveredModels.length) {
       try {
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${k}`);
         const d = await r.json();
-        const bad = ['image','tts','audio','vision','embedding','aqa','robotics','computer','learnlm','bisect'];
+        const bad = ['image', 'tts', 'audio', 'vision', 'embedding', 'aqa', 'robotics', 'computer', 'learnlm', 'bisect'];
         discoveredModels = (d.models || []).filter(m => (m.supportedGenerationMethods || []).includes('generateContent') && m.name.includes('gemini') && !bad.some(b => m.name.toLowerCase().includes(b))).map(m => m.name.replace('models/', ''));
       } catch (e) { lastErr = e.message; }
     }
-    for (const m of [...new Set(['gemini-2.5-flash-lite','gemini-2.0-flash','gemini-2.5-flash','gemini-3.0-flash','gemini-flash-latest',...discoveredModels])].slice(0, 6)) {
+    for (const m of [...new Set(['gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-3.0-flash', 'gemini-flash-latest', ...discoveredModels])].slice(0, 6)) {
       const ok = await tryCall(m, k, sys, contents);
       if (ok) { activeModel = m; return ok; }
     }
@@ -76,9 +111,9 @@ const getLiveCount = () => Math.max(10150, baseLive + (io.engine.clientsCount ||
 setInterval(() => { liveOffset = Math.floor(Math.random() * 90) - 25; io.emit('onlineCount', getLiveCount()); }, 8000);
 
 // 100 Personas: 75 Girls + 25 Boys
-const cities = ['Delhi','Mumbai','Jaipur','Pune','Lucknow','Indore','Chandigarh','Noida','Bhopal','Bengaluru','Patna','Ahmedabad','Gurugram','Dehradun','Amritsar','Kanpur','Kolkata','Hyderabad','Varanasi','Surat','Ranchi','Jodhpur'];
-const girlNames = ['Sneha','Priya','Ananya','Riya','Kavya','Nidhi','Tanya','Simran','Meera','Pooja','Isha','Shreya','Aisha','Diya','Kritika','Neha','Tanvi','Palak','Rhea','Aditi','Anushka','Sanya','Kashish','Avni','Mansi','Sakshi','Prachi','Khushi','Nandini','Jyoti','Aarti','Bhavna','Charu','Damini','Esha','Falguni','Garima','Harshita','Ira','Jiya','Kajal','Lavanya','Mahima','Navya','Ojasvi','Payal','Radhika','Srishti','Trisha','Urvi','Vaishali','Yamini','Zoya','Aarohi','Bhoomi','Chhavi','Deepika','Ekta','Gauri','Hema','Inaaya','Jhanvi','Kiara','Leena','Madhuri','Naina','Pihu','Ritu','Swati','Tara','Unnati','Vidya','Yukti','Aanchal','Bina'];
-const boyNames = ['Aarav','Rohan','Kabir','Dev','Aditya','Yash','Karan','Harsh','Siddharth','Manish','Vikram','Nikhil','Arjun','Vivaan','Rishabh','Kunal','Samar','Aman','Pranav','Dhruv','Tarun','Varun','Rahul','Saurabh','Mohit'];
+const cities = ['Delhi', 'Mumbai', 'Jaipur', 'Pune', 'Lucknow', 'Indore', 'Chandigarh', 'Noida', 'Bhopal', 'Bengaluru', 'Patna', 'Ahmedabad', 'Gurugram', 'Dehradun', 'Amritsar', 'Kanpur', 'Kolkata', 'Hyderabad', 'Varanasi', 'Surat', 'Ranchi', 'Jodhpur'];
+const girlNames = ['Sneha', 'Priya', 'Ananya', 'Riya', 'Kavya', 'Nidhi', 'Tanya', 'Simran', 'Meera', 'Pooja', 'Isha', 'Shreya', 'Aisha', 'Diya', 'Kritika', 'Neha', 'Tanvi', 'Palak', 'Rhea', 'Aditi', 'Anushka', 'Sanya', 'Kashish', 'Avni', 'Mansi', 'Sakshi', 'Prachi', 'Khushi', 'Nandini', 'Jyoti', 'Aarti', 'Bhavna', 'Charu', 'Damini', 'Esha', 'Falguni', 'Garima', 'Harshita', 'Ira', 'Jiya', 'Kajal', 'Lavanya', 'Mahima', 'Navya', 'Ojasvi', 'Payal', 'Radhika', 'Srishti', 'Trisha', 'Urvi', 'Vaishali', 'Yamini', 'Zoya', 'Aarohi', 'Bhoomi', 'Chhavi', 'Deepika', 'Ekta', 'Gauri', 'Hema', 'Inaaya', 'Jhanvi', 'Kiara', 'Leena', 'Madhuri', 'Naina', 'Pihu', 'Ritu', 'Swati', 'Tara', 'Unnati', 'Vidya', 'Yukti', 'Aanchal', 'Bina'];
+const boyNames = ['Aarav', 'Rohan', 'Kabir', 'Dev', 'Aditya', 'Yash', 'Karan', 'Harsh', 'Siddharth', 'Manish', 'Vikram', 'Nikhil', 'Arjun', 'Vivaan', 'Rishabh', 'Kunal', 'Samar', 'Aman', 'Pranav', 'Dhruv', 'Tarun', 'Varun', 'Rahul', 'Saurabh', 'Mohit'];
 
 const personas = [
   ...girlNames.map((name, i) => ({ name, gender: 'girl', age: 18 + (i % 6), city: cities[i % cities.length], picIdx: i % realGirlPics.length })),
@@ -89,22 +124,40 @@ const isAbusive = t => /\b(mc|bc|bsdk|madarchod|bhenchod|behenchod|chutiya|chuti
 
 function rememberUserInfo(room, text) {
   const lower = text.toLowerCase();
-  for (const c of cities) { if (lower.includes(c.toLowerCase())) { room.mem.city = c; break; } }
+  for (const c of cities) {
+    if (lower.includes(c.toLowerCase())) { room.mem.city = c; break; }
+  }
   const nm = text.match(/(?:naam|name|mai|me|main)\s+(?:hai\s+|h\s+)?([a-zA-Z]{3,15})/i);
-  if (nm && !cities.map(x => x.toLowerCase()).includes(nm[1].toLowerCase()) && !['delhi','se','hu','hoon','bhi','kya','aur','theek','mast','pic','photo'].includes(nm[1].toLowerCase())) room.mem.name = nm[1];
+  if (nm && !cities.map(x => x.toLowerCase()).includes(nm[1].toLowerCase()) && !['delhi', 'se', 'hu', 'hoon', 'bhi', 'kya', 'aur', 'theek', 'mast', 'pic', 'photo'].includes(nm[1].toLowerCase())) {
+    room.mem.name = nm[1];
+  }
 }
 
 function humanFallback(room, userMsg) {
   const isGirl = room.persona.gender === 'girl', m = userMsg.toLowerCase();
   const askedPic = /\b(pic|pics|photo|selfie|snaps?|dikhao|dikha|shakal|face)\b/i.test(m), canPic = room.count >= 4;
-  if (askedPic && !canPic) return isGirl ? `arey ${room.mem.name ? room.mem.name + ' ' : ''}abhi toh baat shuru hui h, pehle jaan pehchan toh ho jaye 😂` : `itni jaldi kya h ${room.mem.name || 'bhai'}, pehle thodi baat toh kr le 😂`;
+  if (askedPic && !canPic) {
+    return isGirl
+      ? `arey ${room.mem.name ? room.mem.name + ' ' : ''}abhi toh baat shuru hui h, pehle jaan pehchan toh ho jaye 😂`
+      : `itni jaldi kya h ${room.mem.name || 'bhai'}, pehle thodi baat toh kr le 😂`;
+  }
   if (askedPic && canPic) return isGirl ? 'ye lo abhi ki pic 🙈' : 'ye le bhai 😎';
-  if (/\b(ai|bot|robot)\b/i.test(m)) return isGirl ? `pagal ho kya yr 😂 ${room.persona.city} me baithi hu mai, insaan hi hu` : `pagal h kya bhai 😂 ${room.persona.city} me baitha hu mai, insaan hi hu`;
+  if (/\b(ai|bot|robot)\b/i.test(m)) {
+    return isGirl ? `pagal ho kya yr 😂 ${room.persona.city} me baithi hu mai, insaan hi hu` : `pagal h kya bhai 😂 ${room.persona.city} me baitha hu mai, insaan hi hu`;
+  }
   if (m.includes('naam') || m.includes('name')) return `mera naam ${room.persona.name} h, ${room.persona.city} se 🙂`;
-  if (m.includes('kahan') || m.includes('kha se') || m.includes('city')) return room.mem.city ? `mai ${room.persona.city} se hu! tum toh ${room.mem.city} se ho na?` : `mai ${room.persona.city} se hu! tum kahan se ho?`;
-  if (m.includes('clg') || m.includes('college') || m.includes('padhai') || m.includes('job')) return isGirl ? `mai abhi clg me hu yr, tum kya kr rhe ho?` : `mai abhi clg me hu bhai, tu kya kr rha h?`;
-  if (m.includes('kya kr') || m.includes('kya kar') || m.includes('kya chal')) return isGirl ? `kuch khas nhi yr bas phone chala rhi hu, tum btao?` : `kuch khas nhi bhai bas phone chala rha hu, tu bta?`;
-  const opts = isGirl ? [`${room.mem.name ? room.mem.name + ', ' : ''}acha nice yr! waise free time me kya krna pasand h?`,`haha sahi bol rhe ho yr, aur btao kya scene h?`,`yahan ${room.persona.city} me toh mast mausam h, tumhara din kaisa ja rha?`,`ek truth ya dare khelein kya? 🎲`] : [`${room.mem.name ? room.mem.name + ', ' : ''}acha nice bhai! waise free time me kya krna pasand h?`,`haha sahi bol rha h bhai, aur bta kya scene h?`,`yahan ${room.persona.city} me toh mast mausam h, tera din kaisa ja rha?`,`ek truth ya dare khelein kya? 🎲`];
+  if (m.includes('kahan') || m.includes('kha se') || m.includes('city')) {
+    return room.mem.city ? `mai ${room.persona.city} se hu! tum toh ${room.mem.city} se ho na?` : `mai ${room.persona.city} se hu! tum kahan se ho?`;
+  }
+  if (m.includes('clg') || m.includes('college') || m.includes('padhai') || m.includes('job')) {
+    return isGirl ? `mai abhi clg me hu yr, tum kya kr rhe ho?` : `mai abhi clg me hu bhai, tu kya kr rha h?`;
+  }
+  if (m.includes('voice')) {
+    return isGirl ? `haa sun rhi hu yr! tum bhi record krke bhejo 🎙️` : `haa sun rha hu bhai! tu bhi record krke bhej 🎙️`;
+  }
+  const opts = isGirl
+    ? [`${room.mem.name ? room.mem.name + ', ' : ''}acha nice yr! waise free time me kya krna pasand h?`, `haha sahi bol rhe ho yr, aur btao kya scene h?`, `yahan ${room.persona.city} me toh mast mausam h, tumhara din kaisa ja rha?`, `ek truth ya dare khelein kya? 🎲`]
+    : [`${room.mem.name ? room.mem.name + ', ' : ''}acha nice bhai! waise free time me kya krna pasand h?`, `haha sahi bol rha h bhai, aur bta kya scene h?`, `yahan ${room.persona.city} me toh mast mausam h, tera din kaisa ja rha?`, `ek truth ya dare khelein kya? 🎲`];
   return opts.find(x => !room.used.has(x.toLowerCase())) || opts[room.count % opts.length];
 }
 
@@ -171,8 +224,19 @@ function scheduleAI(s, rid, delay = 900) {
       if (!rooms[rid]) return;
       s.emit('partnerTyping', false);
       s.emit('receiveMessage', { sender: rm.persona.name, message: res.text, image: res.image, isSelf: false });
-      if (res.skip) setTimeout(() => { if (rooms[rid]) { const n = rm.persona.name; delete rooms[rid]; s.leave(rid); s.data.roomId = null; s.data.skipped = true; s.emit('partnerLeft', `${n} ne chat skip kar di.`); } }, 800);
-    } finally { rm.busy = false; s.emit('partnerTyping', false); if (rooms[rid]?.pending?.length) scheduleAI(s, rid, 800); }
+      if (res.skip) {
+        setTimeout(() => {
+          if (rooms[rid]) {
+            const n = rm.persona.name;
+            delete rooms[rid]; s.leave(rid); s.data.roomId = null; s.data.skipped = true;
+            s.emit('partnerLeft', `${n} ne chat skip kar di.`);
+          }
+        }, 800);
+      }
+    } finally {
+      rm.busy = false; s.emit('partnerTyping', false);
+      if (rooms[rid]?.pending?.length) scheduleAI(s, rid, 800);
+    }
   }, delay);
 }
 
@@ -187,11 +251,22 @@ function connectAI(s, username, mood, genderFilter = 'any') {
   s.join(rid); s.data.roomId = rid; s.data.username = username; s.data.skipped = false;
   rooms[rid] = { type: 'ai', persona: p, mood: mood || 'Any', mem: {}, history: [{ role: 'ai', text: 'hey' }], used: new Set(['hey']), count: 0, media: 0, pending: [], timer: null, busy: false };
   s.emit('chatStarted', { partnerName: p.name, isPrivate: false });
-  setTimeout(() => { if (rooms[rid]) { s.emit('partnerTyping', true); setTimeout(() => { if (rooms[rid]) { s.emit('partnerTyping', false); s.emit('receiveMessage', { sender: p.name, message: 'hey', isSelf: false }); } }, 1000); } }, 600);
+  setTimeout(() => {
+    if (rooms[rid]) {
+      s.emit('partnerTyping', true);
+      setTimeout(() => {
+        if (rooms[rid]) {
+          s.emit('partnerTyping', false);
+          s.emit('receiveMessage', { sender: p.name, message: 'hey', isSelf: false });
+        }
+      }, 1000);
+    }
+  }, 600);
 }
 
 io.on('connection', (s) => {
   s.emit('onlineCount', getLiveCount());
+
   s.on('joinRandom', (pl) => {
     cleanup(s); s.data.skipped = false;
     const username = (typeof pl === 'object' ? pl.username : pl)?.trim() || 'Stranger';
@@ -210,10 +285,14 @@ io.on('connection', (s) => {
       s.emit('chatStarted', { partnerName: pt.username, isPrivate: false });
       ps.emit('chatStarted', { partnerName: username, isPrivate: false });
     } else {
-      const timer = setTimeout(() => { const i = queue.findIndex(u => u.socketId === s.id); if (i !== -1) { queue.splice(i, 1); connectAI(s, username, mood, gFilter); } }, 6000);
+      const timer = setTimeout(() => {
+        const i = queue.findIndex(u => u.socketId === s.id);
+        if (i !== -1) { queue.splice(i, 1); connectAI(s, username, mood, gFilter); }
+      }, 6000);
       queue.push({ socketId: s.id, username, mood, timer });
     }
   });
+
   s.on('joinPrivate', ({ username, roomCode }) => {
     cleanup(s); s.data.skipped = false;
     const name = (username || 'Guest').trim(), code = (roomCode || 'ROOM1').trim().toUpperCase(), rid = `private_${code}`;
@@ -222,13 +301,18 @@ io.on('connection', (s) => {
     s.emit('chatStarted', { partnerName: `Room: ${code}`, isPrivate: true, roomCode: code });
     s.to(rid).emit('systemMessage', `${name} ne room join kiya!`);
   });
+
   s.on('sendMessage', (pl) => {
     if (s.data.skipped) return;
-    const msg = (typeof pl === 'object' ? pl.message : pl || '').trim(), image = pl?.image || null;
-    if (!msg && !image) return;
+    const msg = (typeof pl === 'object' ? pl.message : pl || '').trim();
+    const image = pl?.image || null;
+    const audioData = pl?.audioData || null;
+    if (!msg && !image && !audioData) return;
+
     const now = Date.now();
-    if (!image && s.data.lastMsg === msg && now - (s.data.lastTime || 0) < 900) return;
+    if (!image && !audioData && s.data.lastMsg === msg && now - (s.data.lastTime || 0) < 900) return;
     s.data.lastMsg = msg; s.data.lastTime = now;
+
     let rid = s.data.roomId;
     if (!rid || !rooms[rid]) {
       s.data.username = (pl?.username || s.data.username || 'Stranger').trim();
@@ -236,15 +320,24 @@ io.on('connection', (s) => {
       rid = `ai_${s.id}_${Date.now()}`; s.join(rid); s.data.roomId = rid;
       rooms[rid] = { type: 'ai', persona: p, mood: pl?.mood || 'Any', mem: {}, history: [], used: new Set(), count: 0, media: 0, pending: [], timer: null, busy: false };
     }
+
     const r = rooms[rid], sender = s.data.username || 'You';
-    s.emit('receiveMessage', { sender, message: msg, image, isSelf: true });
-    if (r.type !== 'ai') s.to(rid).emit('receiveMessage', { sender, message: msg, image, isSelf: false });
-    else { r.pending.push(image ? `${msg || ''} [User sent photo]`.trim() : msg); scheduleAI(s, rid, 900); }
+    s.emit('receiveMessage', { sender, message: msg, image, audioData, isSelf: true });
+    if (r.type !== 'ai') {
+      s.to(rid).emit('receiveMessage', { sender, message: msg, image, audioData, isSelf: false });
+    } else {
+      r.pending.push(audioData ? 'User sent a voice note' : (image ? `${msg || ''} [User sent photo]`.trim() : msg));
+      scheduleAI(s, rid, 900);
+    }
   });
-  s.on('typing', (isT) => { const rid = s.data.roomId; if (rid && rooms[rid] && rooms[rid].type !== 'ai') s.to(rid).emit('partnerTyping', isT); });
+
+  s.on('typing', (isT) => {
+    const rid = s.data.roomId;
+    if (rid && rooms[rid] && rooms[rid].type !== 'ai') s.to(rid).emit('partnerTyping', isT);
+  });
+
   s.on('leaveChat', () => cleanup(s));
   s.on('disconnect', () => cleanup(s));
 });
 
 server.listen(process.env.PORT || 3000, () => console.log('BaatHub live'));
-        
