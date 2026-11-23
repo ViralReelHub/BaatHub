@@ -32,7 +32,8 @@ const videoPanel = document.getElementById('videoPanel');
 const voiceStatusText = document.getElementById('voiceStatusText');
 const micToggleBtn = document.getElementById('micToggleBtn');
 const localVideoEl = document.getElementById('localVideoEl');
-const partnerCamLabel = document.getElementById('partnerCamLabel');
+const partnerFaceImg = document.getElementById('partnerFaceImg');
+const partnerCamTag = document.getElementById('partnerCamTag');
 
 const composerForm = document.getElementById('composerForm');
 const msgInput = document.getElementById('msgInput');
@@ -41,45 +42,48 @@ const picPickBtn = document.getElementById('picPickBtn');
 const picFile = document.getElementById('picFile');
 const exitChatBtn = document.getElementById('exitChatBtn');
 
+const partnerFaces = [
+  'https://randomuser.me/api/portraits/women/44.jpg',
+  'https://randomuser.me/api/portraits/women/65.jpg',
+  'https://randomuser.me/api/portraits/women/68.jpg',
+  'https://randomuser.me/api/portraits/women/12.jpg',
+  'https://randomuser.me/api/portraits/women/26.jpg',
+  'https://randomuser.me/api/portraits/women/33.jpg',
+  'https://randomuser.me/api/portraits/men/32.jpg',
+  'https://randomuser.me/api/portraits/men/45.jpg'
+];
+
 let mode = 'text';
 let mood = 'Any';
 let girlModeUnlocked = false;
 let genderFilter = 'any';
 let typingTimer;
 let localStream = null;
+let faceIndex = 0;
 let session = { active: false, isPrivate: false, partnerName: '', roomCode: '', username: 'Stranger' };
 
-// Animated Motion Loop for Top Preview Box
+function setPartnerFace(name = 'Partner') {
+  faceIndex = (faceIndex + 1) % partnerFaces.length;
+  if (partnerFaceImg) partnerFaceImg.src = partnerFaces[faceIndex];
+  if (partnerCamTag) partnerCamTag.textContent = name;
+}
+
 function runMotionPreview() {
   if (!motionPreviewBox) return;
   const steps = [
-    () => {
-      motionPreviewBox.innerHTML = `<div class="p-bub left">Hey 👋</div><div class="p-dots">•••</div>`;
-    },
-    () => {
-      motionPreviewBox.innerHTML = `<div class="p-bub left">Hey 👋</div><div class="p-bub right">Hi! Where you from?</div><div class="p-dots">•••</div>`;
-    },
-    () => {
-      motionPreviewBox.innerHTML = `<div class="p-bub left">Hey 👋</div><div class="p-bub right">Hi! Where you from?</div><div class="p-bub left">Delhi se 😊 tum kahan se?</div>`;
-    },
-    () => {
-      motionPreviewBox.innerHTML = `<div class="p-bub right">Hi! Where you from?</div><div class="p-bub left">Delhi se 😊 tum kahan se?</div><div class="p-dots">•••</div>`;
-    }
+    () => { motionPreviewBox.innerHTML = `<div class="p-bub left">Hey 👋</div><div class="p-dots">•••</div>`; },
+    () => { motionPreviewBox.innerHTML = `<div class="p-bub left">Hey 👋</div><div class="p-bub right">Hi! Where you from?</div><div class="p-dots">•••</div>`; },
+    () => { motionPreviewBox.innerHTML = `<div class="p-bub left">Hey 👋</div><div class="p-bub right">Hi! Where you from?</div><div class="p-bub left">Delhi se 😊 tum kahan se?</div>`; },
+    () => { motionPreviewBox.innerHTML = `<div class="p-bub right">Hi! Where you from?</div><div class="p-bub left">Delhi se 😊 tum kahan se?</div><div class="p-dots">•••</div>`; }
   ];
   let idx = 0;
   steps[0]();
-  setInterval(() => {
-    idx = (idx + 1) % steps.length;
-    steps[idx]();
-  }, 1900);
+  setInterval(() => { idx = (idx + 1) % steps.length; steps[idx](); }, 1900);
 }
 runMotionPreview();
 
 function stopLocalCam() {
-  if (localStream) {
-    localStream.getTracks().forEach(t => t.stop());
-    localStream = null;
-  }
+  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
   if (localVideoEl) localVideoEl.srcObject = null;
 }
 
@@ -96,13 +100,11 @@ async function applyModeUI(newMode) {
   videoPanel.classList.toggle('hidden', mode !== 'video');
 
   if (mode === 'video') {
-    partnerCamLabel.textContent = session.partnerName ? `${session.partnerName} Cam` : 'Stranger Cam Live';
+    setPartnerFace(session.partnerName || 'Partner');
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       localVideoEl.srcObject = localStream;
-    } catch (_) {
-      partnerCamLabel.textContent = session.partnerName ? `${session.partnerName} Live` : 'Video Chat Active';
-    }
+    } catch (_) {}
   } else {
     stopLocalCam();
   }
@@ -114,18 +116,25 @@ document.querySelectorAll('.mini-m-btn').forEach(btn => btn.addEventListener('cl
 micToggleBtn.addEventListener('click', () => {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
-    voiceStatusText.textContent = '🎤 Voice mode active — neeche type karke send karein';
+    voiceStatusText.textContent = '🎙️ Mic ready — neeche type karke send karein';
+    msgInput.focus();
     return;
   }
   const rec = new SR();
   rec.lang = 'hi-IN';
+  micToggleBtn.classList.add('listening');
+  micToggleBtn.textContent = '⏹️ Listening...';
   voiceStatusText.textContent = '🎙️ Sun raha hu... boliye';
   rec.onresult = (ev) => {
     const spoken = ev.results[0][0].transcript;
     if (spoken) sendChat(spoken);
-    voiceStatusText.textContent = '🎤 Voice Mode Ready';
   };
-  rec.onerror = () => { voiceStatusText.textContent = '🎤 Voice Mode Ready'; };
+  rec.onerror = () => { voiceStatusText.textContent = '🎙️ Mic dabakar bolein ya type karein'; };
+  rec.onend = () => {
+    micToggleBtn.classList.remove('listening');
+    micToggleBtn.textContent = '🎙️ Speak';
+    voiceStatusText.textContent = '🎤 Voice Mic Ready';
+  };
   rec.start();
 });
 
@@ -335,7 +344,7 @@ socket.on('chatStarted', ({ partnerName, isPrivate }) => {
   session.active = true;
   session.partnerName = partnerName;
   session.isPrivate = Boolean(isPrivate);
-  partnerCamLabel.textContent = `${partnerName} Cam Live`;
+  setPartnerFace(partnerName);
   appendSys(isPrivate ? partnerName : `Connected with ${partnerName}`);
 });
 
