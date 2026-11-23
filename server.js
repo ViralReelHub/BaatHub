@@ -24,7 +24,7 @@ app.get('/ai-media', (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
 
   if (isGif) {
-    const g = [['😂','KYA BOL RHA H 😂','#ec4899','#8b5cf6'],['👀','NO WAYYY 👀','#2563eb','#06b6d4'],['🙈','CHAL JHOOTHA 🙈','#db2777','#f43f5e'],['🔥','VIBE HAI BHAI 🔥','#ea580c','#eab308']][(seed + v) % 4];
+    const g = [['😂','KYA BOL RHA H 😂','#ec4899'],['👀','NO WAYYY 👀','#2563eb'],['🙈','CHAL JHOOTHA 🙈','#db2777'],['🔥','VIBE HAI BHAI 🔥','#ea580c']][(seed + v) % 4];
     return res.send(`<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160"><rect width="240" height="160" rx="16" fill="${g[2]}"/><text x="120" y="82" font-size="52" text-anchor="middle">${g[0]}</text><rect x="30" y="110" width="180" height="28" rx="14" fill="rgba(0,0,0,0.5)"/><text x="120" y="129" fill="#fff" font-family="sans-serif" font-size="12" font-weight="bold" text-anchor="middle">${g[1]}</text></svg>`);
   }
   const bg = isGirl ? '#be185d' : '#1d4ed8';
@@ -36,35 +36,58 @@ app.get('/ai-media', (req, res) => {
 });
 
 let activeModel = null;
+let discoveredModels = [];
 let lastErr = 'None';
 
+async function tryOneModel(m, key, sys, contents) {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 9000);
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal,
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: sys }] }, contents, generationConfig: { temperature: 0.95, maxOutputTokens: 250 } })
+    });
+    clearTimeout(t);
+    const d = await r.json();
+    if (!r.ok || d.error) { lastErr = `${m}: ${d?.error?.message || r.statusText}`; return null; }
+    const raw = (d?.candidates?.[0]?.content?.parts || []).filter(p => !p.thought && p.text).map(p => p.text).join('').trim();
+    const skip = /\[SKIP\]/i.test(raw), sendPic = /\[SEND_PIC\]/i.test(raw), sendGif = /\[SEND_GIF\]/i.test(raw);
+    const text = raw.replace(/\[(SKIP|SEND_PIC|SEND_GIF)\]/gi, '').split('\n').map(x => x.trim()).filter(x => x && !/^(thought|thinking|building|refining|\*)/i.test(x)).join(' ').trim();
+    if (text || sendPic || sendGif) { lastErr = null; return { text, skip, sendPic, sendGif }; }
+    lastErr = `${m}: Empty`;
+  } catch (e) { lastErr = `${m}: ${e.message}`; }
+  return null;
+}
+
 async function callAI(key, sys, contents) {
-  const list = activeModel ? [activeModel] : ['gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-3.0-flash', 'gemini-flash-latest'];
-  for (const m of list) {
+  if (activeModel) {
+    const ok = await tryOneModel(activeModel, key, sys, contents);
+    if (ok) return ok;
+    activeModel = null;
+  }
+  if (!discoveredModels.length) {
     try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 8500);
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal,
-        body: JSON.stringify({ systemInstruction: { parts: [{ text: sys }] }, contents, generationConfig: { temperature: 0.95, maxOutputTokens: 220 } })
-      });
-      clearTimeout(t);
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
       const d = await r.json();
-      if (!r.ok || d.error) { lastErr = `${m}: ${d?.error?.message || r.statusText}`; activeModel = null; continue; }
-      const raw = (d?.candidates?.[0]?.content?.parts || []).filter(p => !p.thought && p.text).map(p => p.text).join('').trim();
-      const skip = /\[SKIP\]/i.test(raw), sendPic = /\[SEND_PIC\]/i.test(raw), sendGif = /\[SEND_GIF\]/i.test(raw);
-      const text = raw.replace(/\[(SKIP|SEND_PIC|SEND_GIF)\]/gi, '').split('\n').map(x => x.trim()).filter(x => x && !/^(thought|thinking|building|refining|\*)/i.test(x)).join(' ').trim();
-      if (text || sendPic || sendGif) { activeModel = m; lastErr = null; return { text, skip, sendPic, sendGif }; }
-    } catch (e) { lastErr = `${m}: ${e.message}`; activeModel = null; }
+      const bad = ['image', 'tts', 'audio', 'vision', 'embedding', 'aqa', 'robotics', 'computer', 'learnlm', 'bisect'];
+      discoveredModels = (d.models || [])
+        .filter(m => (m.supportedGenerationMethods || []).includes('generateContent') && m.name.includes('gemini') && !bad.some(b => m.name.toLowerCase().includes(b)))
+        .map(m => m.name.replace('models/', ''));
+    } catch (e) { lastErr = `ListModels: ${e.message}`; }
+  }
+  const pool = [...new Set(['gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-3.0-flash', 'gemini-flash-latest', ...discoveredModels])];
+  for (const m of pool.slice(0, 6)) {
+    const ok = await tryOneModel(m, key, sys, contents);
+    if (ok) { activeModel = m; return ok; }
   }
   return null;
 }
 
 app.get('/test-ai', async (req, res) => {
   const key = (process.env.GEMINI_API_KEY || '').trim();
-  if (!key) return res.send('<h2>GEMINI_API_KEY missing</h2>');
+  if (!key) return res.send('<h2>GEMINI_API_KEY missing on Render</h2>');
   const out = await callAI(key, 'Reply in 4 words Hinglish.', [{ role: 'user', parts: [{ text: 'aur bhai kya haal' }] }]);
-  res.send(out ? `<h2>Working (${activeModel})</h2><p>${out.text}</p><a href="/">Back</a>` : `<h2>Error:</h2><pre>${lastErr}</pre>`);
+  res.send(out ? `<h2>✅ Working (${activeModel})</h2><p>${out.text}</p><a href="/">Back</a>` : `<h2>❌ Error:</h2><pre>${lastErr}</pre>`);
 });
 
 const baseOnline = Math.floor(Math.random() * 8) + 25;
@@ -100,35 +123,55 @@ async function getReply(room, userMsg) {
   room.count = (room.count || 0) + 1;
   room.history.push({ role: 'user', text: userMsg });
   const key = (process.env.GEMINI_API_KEY || '').trim();
-  if (!key) return null;
 
   const canPic = room.count >= 4;
-  const gRule = isGirl ? 'Use feminine Hindi verbs (kr rhi hu, baithi hu).' : 'Use masculine Hindi verbs (kr rha hu, baitha hu).';
-  const pRule = canPic ? 'User chatted enough. If they ask for pic/selfie now, agree playfully and add [SEND_PIC] at end.' : `User only sent ${room.count} msgs. If they ask for pic/selfie now, DO NOT send pic or [SEND_PIC]; refuse playfully like "pehle thodi baat toh kr le 😂".`;
-  const sys = `You are ${room.persona.name}, ${room.persona.age}yo Indian ${isGirl ? 'girl' : 'boy'} from ${room.persona.city} on BaatHub (mood: ${room.mood}).
-Rules: 1. Reply in 1 short casual Hinglish/English line (3-14 words). 2. Remember user's name, city & prior messages; never repeat questions or lines. 3. ${gRule} 4. ${pRule} 5. If user asks for GIF/meme, add [SEND_GIF]. 6. If rude/spam, add [SKIP]. Never admit being AI.`;
-
-  const contents = [];
-  for (const h of room.history.slice(-26)) {
-    const role = h.role === 'user' ? 'user' : 'model';
-    if (!contents.length && role === 'model') continue;
-    if (contents.length && contents[contents.length - 1].role === role) contents[contents.length - 1].parts[0].text += '\n' + h.text;
-    else contents.push({ role, parts: [{ text: h.text }] });
-  }
-  const ai = await callAI(key, sys, contents);
-  if (!ai) return null;
-
   const askedPic = /\b(pic|pics|photo|selfie|snaps?|dikhao|dikha|shakal)\b/i.test(userMsg);
   const askedGif = /\b(gif|meme)\b/i.test(userMsg);
+
+  let ai = null;
+  if (key) {
+    const gRule = isGirl ? 'Use feminine Hindi verbs (kr rhi hu, baithi hu).' : 'Use masculine Hindi verbs (kr rha hu, baitha hu).';
+    const pRule = canPic
+      ? 'User chatted enough. If they ask for pic/selfie now, agree playfully and add [SEND_PIC] at end.'
+      : `User only sent ${room.count} msgs. If they ask for pic/selfie now, DO NOT send pic or [SEND_PIC]; refuse playfully like "pehle thodi baat toh kr le 😂".`;
+    const sys = `You are ${room.persona.name}, ${room.persona.age}yo Indian ${isGirl ? 'girl' : 'boy'} from ${room.persona.city} on BaatHub (mood: ${room.mood}).
+Rules: 1. Reply in 1 short casual Hinglish/English line (3-14 words). 2. Remember user's name, city & prior messages; never repeat questions or lines. 3. ${gRule} 4. ${pRule} 5. If user asks for GIF/meme, add [SEND_GIF]. 6. If rude/spam, add [SKIP]. Never admit being AI.`;
+
+    const contents = [];
+    for (const h of room.history.slice(-26)) {
+      const role = h.role === 'user' ? 'user' : 'model';
+      if (!contents.length && role === 'model') continue;
+      if (contents.length && contents[contents.length - 1].role === role) contents[contents.length - 1].parts[0].text += '\n' + h.text;
+      else contents.push({ role, parts: [{ text: h.text }] });
+    }
+    ai = await callAI(key, sys, contents);
+  }
+
   let image = null;
-  if (ai.sendGif || askedGif) image = `/ai-media?type=gif&name=${encodeURIComponent(room.persona.name)}&v=${room.media++}&t=${Date.now()}`;
-  else if (canPic && (ai.sendPic || askedPic)) {
+  if ((ai && ai.sendGif) || askedGif) {
+    image = `/ai-media?type=gif&name=${encodeURIComponent(room.persona.name)}&v=${room.media++}&t=${Date.now()}`;
+  } else if (canPic && ((ai && ai.sendPic) || askedPic)) {
     const list = isGirl ? customMedia.girlPics : customMedia.boyPics;
     image = list.length ? list[room.media++ % list.length] : `/ai-media?type=pic&name=${encodeURIComponent(room.persona.name)}&gender=${room.persona.gender}&city=${encodeURIComponent(room.persona.city)}&v=${room.media++}&t=${Date.now()}`;
   }
-  const text = ai.text || (image ? (isGirl ? 'ye lo 🙈' : 'ye le bhai 😎') : '');
+
+  let text = ai?.text || '';
+  if (!text) {
+    if (askedPic && !canPic) {
+      text = isGirl ? 'arey abhi toh baat shuru hui h, pehle jaan pehchan toh ho jaye 😂' : 'itni jaldi kya h bhai, pehle thodi baat toh kr le 😂';
+    } else if (image) {
+      text = isGirl ? 'ye lo abhi ki click 🙈' : 'ye le bhai 😎';
+    } else {
+      const fallbacks = isGirl
+        ? ['acha nice yr, waise tum kahan se ho?', 'haha sahi h, aur btao kya chal rha h?', 'abhi clg me ho ya job kr rhe ho?', 'ek truth or dare khelein kya? 🎲']
+        : ['acha nice bhai, waise tu kahan se h?', 'haha sahi h, aur bta kya chal rha h?', 'abhi clg me h ya job kr rha h?', 'ek truth or dare khelein kya? 🎲'];
+      text = fallbacks.find(f => !room.used.has(f)) || fallbacks[room.count % fallbacks.length];
+    }
+  }
+
+  room.used.add(text);
   room.history.push({ role: 'ai', text });
-  return { text, skip: ai.skip, image };
+  return { text, skip: Boolean(ai?.skip), image };
 }
 
 function scheduleAI(s, rid, delay = 900) {
@@ -149,7 +192,6 @@ function scheduleAI(s, rid, delay = 900) {
       await new Promise(ok => setTimeout(ok, Math.max(800, 1700 - (Date.now() - t0))));
       if (!rooms[rid]) return;
       s.emit('partnerTyping', false);
-      if (!res) { const n = rm.persona.name; delete rooms[rid]; s.leave(rid); s.data.roomId = null; s.data.skipped = true; s.emit('partnerLeft', `${n} disconnect ho gaya.`); return; }
       s.emit('receiveMessage', { sender: rm.persona.name, message: res.text, image: res.image, isSelf: false });
       if (res.skip) setTimeout(() => { if (rooms[rid]) { const n = rm.persona.name; delete rooms[rid]; s.leave(rid); s.data.roomId = null; s.data.skipped = true; s.emit('partnerLeft', `${n} ne chat skip kar di.`); } }, 800);
     } finally {
@@ -167,7 +209,7 @@ function connectAI(s, username, mood) {
   s.data.seen.add(p.name);
   const rid = `ai_${s.id}_${Date.now()}`;
   s.join(rid); s.data.roomId = rid; s.data.username = username; s.data.skipped = false;
-  rooms[rid] = { type: 'ai', persona: p, mood: mood || 'Any', history: [{ role: 'ai', text: 'hey' }], count: 0, media: 0, pending: [], timer: null, busy: false };
+  rooms[rid] = { type: 'ai', persona: p, mood: mood || 'Any', history: [{ role: 'ai', text: 'hey' }], used: new Set(['hey']), count: 0, media: 0, pending: [], timer: null, busy: false };
   s.emit('chatStarted', { partnerName: p.name, isPrivate: false });
   setTimeout(() => { if (rooms[rid]) { s.emit('partnerTyping', true); setTimeout(() => { if (rooms[rid]) { s.emit('partnerTyping', false); s.emit('receiveMessage', { sender: p.name, message: 'hey', isSelf: false }); } }, 1000); } }, 600);
 }
@@ -215,7 +257,7 @@ io.on('connection', (s) => {
       s.data.username = (pl?.username || s.data.username || 'Stranger').trim();
       const p = personas.find(x => x.name === (pl?.partnerName || '').trim()) || personas[0];
       rid = `ai_${s.id}_${Date.now()}`; s.join(rid); s.data.roomId = rid;
-      rooms[rid] = { type: 'ai', persona: p, mood: pl?.mood || 'Any', history: [], count: 0, media: 0, pending: [], timer: null, busy: false };
+      rooms[rid] = { type: 'ai', persona: p, mood: pl?.mood || 'Any', history: [], used: new Set(), count: 0, media: 0, pending: [], timer: null, busy: false };
     }
     const r = rooms[rid], sender = s.data.username || 'You';
     s.emit('receiveMessage', { sender, message: msg, image, isSelf: true });
@@ -228,4 +270,4 @@ io.on('connection', (s) => {
 });
 
 server.listen(process.env.PORT || 3000, () => console.log('BaatHub live'));
-                              
+    
