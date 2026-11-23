@@ -28,6 +28,34 @@ app.get('/sitemap.xml', (req, res) => {
   </urlset>`);
 });
 
+// AI Connection Check Route (Browser mein /test-ai kholkar check karein)
+app.get('/test-ai', async (req, res) => {
+  const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+  if (!apiKey) {
+    return res.send('<h2>❌ Error: Render par GEMINI_API_KEY set nahi hai!</h2><p>Render Dashboard > BaatHub > Environment mein jakar GEMINI_API_KEY add karein aur Save Changes dabayein.</p>');
+  }
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: 'Reply in 4 words in Hinglish: aur bhai kya haal' }] }]
+        })
+      }
+    );
+    const data = await response.json();
+    if (data.error) {
+      return res.send(`<h2>❌ Google API Error:</h2><pre>${JSON.stringify(data.error, null, 2)}</pre>`);
+    }
+    const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || 'Empty response';
+    res.send(`<h2>✅ Real AI Connected & Working!</h2><p><strong>AI Reply:</strong> ${reply}</p><a href="/">Ab Chat Test Karein</a>`);
+  } catch (err) {
+    res.send(`<h2>❌ Server Error:</h2><p>${err.message}</p>`);
+  }
+});
+
 // Live Online Counter (Hamesha 25+ Members Live Rahenge)
 const baseOffset = Math.floor(Math.random() * 8) + 25;
 function broadcastOnlineCount() {
@@ -39,12 +67,12 @@ setInterval(broadcastOnlineCount, 10000);
 
 // AI Personas (Real Indian Users Jaise)
 const aiPersonas = [
-  { name: 'Sneha', gender: 'girl', age: 20, city: 'Delhi', hobby: 'reels, street food aur late night music', vibe: 'thodi sarcastic, witty aur friendly' },
+  { name: 'Sneha', gender: 'girl', age: 20, city: 'Delhi', hobby: 'reels, momos aur late night music', vibe: 'thodi sarcastic, witty aur friendly' },
   { name: 'Aarav', gender: 'boy', age: 21, city: 'Mumbai', hobby: 'gaming, cricket aur standup comedy', vibe: 'chill, funny aur bindass' },
   { name: 'Priya', gender: 'girl', age: 19, city: 'Jaipur', hobby: 'web series, coffee aur travelling', vibe: 'sweet, expressive aur baatuni' },
   { name: 'Rohan', gender: 'boy', age: 22, city: 'Pune', hobby: 'coding, gym aur movies', vibe: 'friendly, relatable aur curious' },
   { name: 'Ananya', gender: 'girl', age: 20, city: 'Lucknow', hobby: 'shayari, songs aur gossip', vibe: 'energetic aur playful' },
-  { name: 'Kabir', gender: 'boy', age: 21, city: 'Indore', hobby: 'food, bikes aur memes', vibe: 'humorous aur casual' }
+  { name: 'Kabir', gender: 'boy', age: 21, city: 'Indore', hobby: 'street food, bikes aur memes', vibe: 'humorous aur casual' }
 ];
 
 let waitingQueue = [];
@@ -73,23 +101,53 @@ function cleanupUser(socket) {
   }
 }
 
+async function callGeminiModel(modelName, apiKey, systemPrompt, contents) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents,
+        safetySettings: [
+          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
+          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' }
+        ],
+        generationConfig: {
+          temperature: 1.05,
+          topP: 0.95,
+          maxOutputTokens: 180
+        }
+      })
+    }
+  );
+  const data = await response.json();
+  if (data.error) {
+    console.error(`Gemini (${modelName}) Error:`, data.error.message);
+    return null;
+  }
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+}
+
 // Real Gemini AI Conversation Engine
 async function getHumanLikeAIReply(room, userMsg) {
-  const { persona, mood, history, opener } = room;
+  const { persona, mood, history, opener, usedFallbacks } = room;
   history.push({ role: 'user', text: userMsg });
 
   const apiKey = (process.env.GEMINI_API_KEY || '').trim();
   if (apiKey) {
     try {
-      const systemPrompt = `Tum ek real Indian ${persona.gender === 'girl' ? 'ladki' : 'ladka'} ho jiska naam ${persona.name} hai (age ${persona.age}, city ${persona.city}, interests: ${persona.hobby}, personality: ${persona.vibe}). Tum BaatHub website par ek stranger se live chat kar rahe ho jiska mood "${mood}" hai. Tumne chat ki shuruat is message se ki thi: "${opener}".
+      const systemPrompt = `Tum ek real Indian ${persona.gender === 'girl' ? 'ladki' : 'ladka'} ho jiska naam ${persona.name} hai (age ${persona.age}, city ${persona.city}, hobbies: ${persona.hobby}, nature: ${persona.vibe}). Tum BaatHub par ek stranger se live chat kar rahe ho jiska mood "${mood}" hai. Tumne pehla message bheja tha: "${opener}".
 
-Strict Rules:
-1. Bilkul asli Indian teenager/college student ki tarah natural Hinglish (Roman Hindi + English) mein chat karo. Har message chhota (1 se 2 lines) WhatsApp chat jaisa rakho.
-2. User jo likhe uska exact aur context-aware jawab do. Ek hi sawal ya ek hi pattern kabhi repeat mat karo.
-3. Kabhi bhi mat maanna ki tum AI, bot ya program ho. Agar koi puche "tum AI ho kya?" toh has kar casual jawab do jaise "pagal ho kya, ${persona.city} se hoon main 😂" ya "itni jaldi shak kar liya? insaan hi hoon bhai".
-4. Apni personality dikhao—kabhi joke maaro, kabhi apni life ka chhota kissa batao, aur natural tareeke se baat aage badhao.`;
+Rules:
+1. Bilkul asli Indian college student ki tarah casual Hinglish (Roman Hindi + English) mein 1-2 lines ke chhote WhatsApp-style replies do.
+2. User ke message ka exact, natural aur naya jawab do—kabhi bhi apni baat repeat mat karo.
+3. Kabhi mat maanna ki tum AI ya bot ho. Koi puche toh has kar casual jawab do ("pagal ho kya, ${persona.city} se hoon main 😂").`;
 
-      const recent = history.slice(-12);
+      const recent = history.slice(-14);
       const contents = [];
       for (const item of recent) {
         const role = item.role === 'user' ? 'user' : 'model';
@@ -101,29 +159,11 @@ Strict Rules:
         }
       }
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-            contents,
-            generationConfig: {
-              temperature: 1.0,
-              topP: 0.95,
-              maxOutputTokens: 250,
-              thinkingConfig: { thinkingBudget: 0 }
-            }
-          })
-        }
-      );
-
-      const data = await response.json();
-      if (data.error) {
-        console.error('Gemini API Error:', data.error.message);
+      let aiText = await callGeminiModel('gemini-2.5-flash', apiKey, systemPrompt, contents);
+      if (!aiText) {
+        aiText = await callGeminiModel('gemini-2.0-flash', apiKey, systemPrompt, contents);
       }
-      const aiText = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
       if (aiText) {
         history.push({ role: 'ai', text: aiText });
         return aiText;
@@ -133,9 +173,25 @@ Strict Rules:
     }
   }
 
-  const fallback = `arey ${persona.city} mein network thoda slow chal raha hai abhi 😂 waise tum batao kya chal raha hai?`;
-  history.push({ role: 'ai', text: fallback });
-  return fallback;
+  // Non-repeating backup pool (har baar alag reply)
+  const backupReplies = [
+    `haha sahi bol rahe ho yaar! waise tum kahan se ho?`,
+    `achha ek baat batao, abhi study kar rahe ho ya job?`,
+    `main ${persona.city} se hoon, yahan toh aaj mausam mast ho raha hai. tumhare wahan kaisa hai?`,
+    `waise tumhe free time mein kya karna sabse zyada pasand hai?`,
+    `koi achhi movie ya web series suggest karo yaar, dekhne ke liye kuch nahi mil raha`,
+    `haha bilkul! aaj poora din kaisa gaya tumhara?`,
+    `sach mein? waise tum kis type ke gaane sunte ho zyada?`,
+    `arey wah! agar abhi kahin ghumne jaane ka mauka mile toh kahan jaoge?`
+  ];
+
+  const available = backupReplies.filter(r => !usedFallbacks.has(r));
+  const pool = available.length > 0 ? available : backupReplies;
+  const chosen = pool[Math.floor(Math.random() * pool.length)];
+  usedFallbacks.add(chosen);
+
+  history.push({ role: 'ai', text: chosen });
+  return chosen;
 }
 
 function connectWithAI(socket, username, mood) {
@@ -158,6 +214,7 @@ function connectWithAI(socket, username, mood) {
     mood: mood || 'Any',
     opener,
     history: [],
+    usedFallbacks: new Set(),
     userSocketId: socket.id
   };
 
