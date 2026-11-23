@@ -36,8 +36,97 @@ const realGifs = [
 ];
 
 app.use(express.static(path.join(__dirname, 'public')));
-app.get('/privacy', (req, res) => res.send('<h1>Privacy Policy - BaatHub</h1><a href="/">Back</a>'));
-app.get('/terms', (req, res) => res.send('<h1>Terms - BaatHub</h1><a href="/">Back</a>'));
+
+const legalPage = (title, heading, updated, sections) => `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${title} — BaatHub</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #080a14;
+      background-image: radial-gradient(circle at 20% 0%, rgba(244,63,94,0.14), transparent 42%), radial-gradient(circle at 85% 25%, rgba(139,92,246,0.16), transparent 45%);
+      color: #f8fafc;
+      min-height: 100vh;
+      padding: 20px 14px 40px;
+      line-height: 1.6;
+    }
+    .box {
+      max-width: 720px;
+      margin: 0 auto;
+      background: rgba(16,20,38,0.94);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 22px;
+      padding: 22px 18px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+    }
+    .top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+    .brand { font-size: 1.2rem; font-weight: 800; color: #fff; text-decoration: none; }
+    .back-btn {
+      text-decoration: none;
+      background: linear-gradient(135deg, #e11d48, #7c3aed);
+      color: #fff;
+      font-size: 0.82rem;
+      font-weight: 700;
+      padding: 8px 14px;
+      border-radius: 999px;
+    }
+    h1 { font-size: 1.55rem; font-weight: 800; margin-bottom: 6px; }
+    .meta { font-size: 0.78rem; color: #94a3b8; margin-bottom: 18px; }
+    .sec { background: #11162b; border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 14px; margin-top: 12px; }
+    .sec h2 { font-size: 1rem; font-weight: 700; color: #fda4af; margin-bottom: 6px; }
+    .sec p { font-size: 0.88rem; color: #cbd5e1; }
+    .foot { margin-top: 22px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; font-size: 0.8rem; color: #94a3b8; }
+    .foot a { color: #a78bfa; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="top">
+      <a href="/" class="brand">BaatHub</a>
+      <a href="/" class="back-btn">← Back to Chat</a>
+    </div>
+    <h1>${heading}</h1>
+    <div class="meta">Last updated: ${updated} • BaatHub Platform</div>
+    ${sections.map(([h, p]) => `<div class="sec"><h2>${h}</h2><p>${p}</p></div>`).join('')}
+    <div class="foot">
+      <span>© 2026 BaatHub. All rights reserved.</span>
+      <span><a href="/privacy">Privacy Policy</a> • <a href="/terms">Terms & Conditions</a></span>
+    </div>
+  </div>
+</body>
+</html>`;
+
+app.get('/privacy', (req, res) => {
+  res.send(legalPage(
+    'Privacy Policy',
+    'Privacy Policy',
+    'November 23, 2026',
+    [
+      ['1. No Permanent Chat Storage', 'BaatHub par hone wali text chats, voice notes aur session messages ko hum permanently database mein store nahi karte. Session khatam ya Next/Exit dabate hi chat state clear ho jaati hai.'],
+      ['2. Nickname & Optional Media', 'Aap bina account ya signup ke BaatHub use kar sakte hain. Agar aap nickname, photo, ya voice recording bhejte hain, toh wo sirf live chat session ko chalane ke liye use hoti hai.'],
+      ['3. Camera, Mic & Cookies', 'Voice aur Video modes tabhi mic ya camera access lete hain jab aap unhe on ya record karte hain. Browser connection aur ad/analytics scripts standard cookies ya local storage ka use kar sakti hain.'],
+      ['4. Safety & Moderation', 'Abusive, spam ya harmful content ko rokne ke liye automated filters aur session controls ka use kiya jata hai. Kripya personal phone number, address ya sensitive details kisi stranger ke saath share na karein.']
+    ]
+  ));
+});
+
+app.get('/terms', (req, res) => {
+  res.send(legalPage(
+    'Terms & Conditions',
+    'Terms & Conditions',
+    'November 23, 2026',
+    [
+      ['1. Acceptance of Terms', 'BaatHub ka use karke aap in Terms & Conditions se sehmat hain. Agar aap in sharton se sehmat nahi hain, toh kripya platform ka upyog na karein.'],
+      ['2. Eligibility & Conduct', 'Aapko kanooni taur par platform use karne ke yogya hona chahiye. Chat, voice, video ya private rooms ke dauran gaali, harassment, spam, illegal content ya kisi ko pareshan karna sakht mana hai.'],
+      ['3. Random Matching, Girl Mode & Modes', 'BaatHub Text, Voice, Video modes aur moods offer karta hai. Default random matching mein koi bhi available user/persona connect ho sakta hai, jabki Girl Mode subscription/unlock ke baad active hota hai.'],
+      ['4. Service Availability & Liability', 'BaatHub "as-is" aur "as-available" basis par chalta hai. Server maintenance, network delay, ya third-party service interruptions ke liye BaatHub zimmedar nahi hoga.']
+    ]
+  ));
+});
 
 function getAllKeys() {
   const envKey = (process.env.GEMINI_API_KEY || '').trim();
@@ -259,85 +348,4 @@ function connectAI(s, username, mood, genderFilter = 'any') {
           s.emit('partnerTyping', false);
           s.emit('receiveMessage', { sender: p.name, message: 'hey', isSelf: false });
         }
-      }, 1000);
-    }
-  }, 600);
-}
-
-io.on('connection', (s) => {
-  s.emit('onlineCount', getLiveCount());
-
-  s.on('joinRandom', (pl) => {
-    cleanup(s); s.data.skipped = false;
-    const username = (typeof pl === 'object' ? pl.username : pl)?.trim() || 'Stranger';
-    const mood = (typeof pl === 'object' ? pl.mood : 'Any') || 'Any';
-    const gFilter = (typeof pl === 'object' && pl.genderFilter === 'girl') ? 'girl' : 'any';
-    s.data.username = username;
-    let idx = gFilter === 'girl' ? -1 : queue.findIndex(u => u.mood === mood);
-    if (idx === -1 && gFilter !== 'girl' && queue.length) idx = 0;
-    if (idx !== -1) {
-      const pt = queue.splice(idx, 1)[0]; clearTimeout(pt.timer);
-      const ps = io.sockets.sockets.get(pt.socketId);
-      if (!ps) return connectAI(s, username, mood, gFilter);
-      const rid = `human_${s.id}_${pt.socketId}`;
-      s.join(rid); ps.join(rid); s.data.roomId = rid; ps.data.roomId = rid;
-      rooms[rid] = { type: 'human' };
-      s.emit('chatStarted', { partnerName: pt.username, isPrivate: false });
-      ps.emit('chatStarted', { partnerName: username, isPrivate: false });
-    } else {
-      const timer = setTimeout(() => {
-        const i = queue.findIndex(u => u.socketId === s.id);
-        if (i !== -1) { queue.splice(i, 1); connectAI(s, username, mood, gFilter); }
-      }, 6000);
-      queue.push({ socketId: s.id, username, mood, timer });
-    }
-  });
-
-  s.on('joinPrivate', ({ username, roomCode }) => {
-    cleanup(s); s.data.skipped = false;
-    const name = (username || 'Guest').trim(), code = (roomCode || 'ROOM1').trim().toUpperCase(), rid = `private_${code}`;
-    s.join(rid); s.data.roomId = rid; s.data.username = name;
-    if (!rooms[rid]) rooms[rid] = { type: 'private' };
-    s.emit('chatStarted', { partnerName: `Room: ${code}`, isPrivate: true, roomCode: code });
-    s.to(rid).emit('systemMessage', `${name} ne room join kiya!`);
-  });
-
-  s.on('sendMessage', (pl) => {
-    if (s.data.skipped) return;
-    const msg = (typeof pl === 'object' ? pl.message : pl || '').trim();
-    const image = pl?.image || null;
-    const audioData = pl?.audioData || null;
-    if (!msg && !image && !audioData) return;
-
-    const now = Date.now();
-    if (!image && !audioData && s.data.lastMsg === msg && now - (s.data.lastTime || 0) < 900) return;
-    s.data.lastMsg = msg; s.data.lastTime = now;
-
-    let rid = s.data.roomId;
-    if (!rid || !rooms[rid]) {
-      s.data.username = (pl?.username || s.data.username || 'Stranger').trim();
-      const p = personas.find(x => x.name === (pl?.partnerName || '').trim()) || personas[0];
-      rid = `ai_${s.id}_${Date.now()}`; s.join(rid); s.data.roomId = rid;
-      rooms[rid] = { type: 'ai', persona: p, mood: pl?.mood || 'Any', mem: {}, history: [], used: new Set(), count: 0, media: 0, pending: [], timer: null, busy: false };
-    }
-
-    const r = rooms[rid], sender = s.data.username || 'You';
-    s.emit('receiveMessage', { sender, message: msg, image, audioData, isSelf: true });
-    if (r.type !== 'ai') {
-      s.to(rid).emit('receiveMessage', { sender, message: msg, image, audioData, isSelf: false });
-    } else {
-      r.pending.push(audioData ? 'User sent a voice note' : (image ? `${msg || ''} [User sent photo]`.trim() : msg));
-      scheduleAI(s, rid, 900);
-    }
-  });
-
-  s.on('typing', (isT) => {
-    const rid = s.data.roomId;
-    if (rid && rooms[rid] && rooms[rid].type !== 'ai') s.to(rid).emit('partnerTyping', isT);
-  });
-
-  s.on('leaveChat', () => cleanup(s));
-  s.on('disconnect', () => cleanup(s));
-});
-
-server.listen(process.env.PORT || 3000, () => console.log('BaatHub live'));
+      }, 1000
