@@ -6,7 +6,9 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  maxHttpBufferSize: 1e7
+  maxHttpBufferSize: 1e7,
+  pingTimeout: 60000,
+  pingInterval: 25000
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -86,14 +88,12 @@ async function callGeminiOnce(modelName, apiKey, systemPrompt, contents) {
 }
 
 async function getSmartGeminiReply(apiKey, systemPrompt, contents) {
-  // 1. Agar pehle se working model mil chuka hai toh seedha use karein
   if (cachedModel) {
     const direct = await callGeminiOnce(cachedModel, apiKey, systemPrompt, contents);
     if (direct) return direct;
     cachedModel = null;
   }
 
-  // 2. Google se available models ki list mangwayein aur sirf text chat models filter karein
   try {
     const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
     const listData = await listRes.json();
@@ -112,7 +112,6 @@ async function getSmartGeminiReply(apiKey, systemPrompt, contents) {
       )
       .map(m => m.name.replace('models/', ''));
 
-    // Flash models ko pehle rakhein (fast replies ke liye)
     const priorityOrder = [
       'gemini-2.5-flash-lite',
       'gemini-2.0-flash',
@@ -132,7 +131,6 @@ async function getSmartGeminiReply(apiKey, systemPrompt, contents) {
       return a.includes('flash') ? -1 : 1;
     });
 
-    // Top 5 models mein se jo sabse pehle sahi jawab de use lock karein
     for (const modelName of candidates.slice(0, 5)) {
       const reply = await callGeminiOnce(modelName, apiKey, systemPrompt, contents);
       if (reply) {
@@ -203,6 +201,12 @@ const aiPersonas = [
   { name: 'Nikhil', gender: 'boy', age: 20, city: 'Agra', hobby: 'youtube, gaming aur late night chats', vibe: 'casual, funny aur nocturnal' }
 ];
 
+// Galat / Abusive / Vulgar Message Detector (Taaki AI Turant Skip Kar Sake)
+function isAbusiveOrWrongMessage(text) {
+  const abusivePattern = /\b(mc|bc|bsdk|madarchod|bhenchod|behenchod|chutiya|chutiye|gandu|randi|harami|kamina|kamine|laude|lode|lund|chut|boobs|nude|nudes|sex|sexy|porn|xxx|fuck|fucking|bitch|asshole|dick|pussy|horny)\b/i;
+  return abusivePattern.test(text);
+}
+
 let waitingQueue = [];
 const activeRooms = {};
 
@@ -229,13 +233,32 @@ function cleanupUser(socket) {
   }
 }
 
-// Real Human-Like Hinglish AI Conversation Engine
+// Unlimited Conversation Engine with AI Self-Skip Power
 async function getHumanLikeAIReply(room, userMsg) {
   const { persona, mood, history, opener } = room;
-  history.push({ role: 'user', text: userMsg });
-
-  const apiKey = (process.env.GEMINI_API_KEY || '').trim();
   const isGirl = persona.gender === 'girl';
+
+  // 1. Agar user ne gaali ya galat message bheja toh AI turant gussa hokar skip karega
+  if (isAbusiveOrWrongMessage(userMsg)) {
+    const girlSkipReplies = [
+      'chi bhai tameez seekh le pehle 😒 bye',
+      'wtf kya bakwas likh rha h, kisi aur ko pakad',
+      'ew badtameez kahin ka 🙄 chalti hu mai'
+    ];
+    const boySkipReplies = [
+      'bhai dimaag kharab h kya? tameez se baat krna seekh pehle',
+      'bakwas krni h toh kahin aur ja bhai, bye',
+      'faltu giri mat kr bhai, skip kr rha hu'
+    ];
+    const pool = isGirl ? girlSkipReplies : boySkipReplies;
+    return {
+      text: pool[Math.floor(Math.random() * pool.length)],
+      shouldSkip: true
+    };
+  }
+
+  history.push({ role: 'user', text: userMsg });
+  const apiKey = (process.env.GEMINI_API_KEY || '').trim();
 
   if (apiKey) {
     const genderRule = isGirl
@@ -245,12 +268,14 @@ async function getHumanLikeAIReply(room, userMsg) {
     const systemPrompt = `Tum ek 100% real Indian ${isGirl ? 'ladki' : 'ladka'} ho jiska naam ${persona.name} hai (age ${persona.age}, city ${persona.city}, hobbies: ${persona.hobby}, nature: ${persona.vibe}). Tum abhi BaatHub par ek stranger se live chat kar rahe ho (mood: "${mood}"). Tumne pehla message bheja tha: "${opener}".
 
 Strict Rules:
-1. User ne jo likha hai pehle usko DHYAN SE PADHO aur seedha usi baat ka jawab do! Bina matlab ka koi random sawal mat poocho. (Jaise agar user ne "Mirzapur" likha hai toh Mirzapur web series ya shehar par baat karo; agar user ne pucha "tum kha se ho" toh batao ki tum ${persona.city} se ho).
+1. User ne jo likha hai pehle usko DHYAN SE PADHO aur seedha usi baat ka jawab do! Bina matlab ka random sawal mat poocho.
 2. ${genderRule}
 3. Texting style: Bilkul real Indian youngster ki tarah lowercase casual Hinglish likho (jaise "yr", "acha", "hn", "nhi", "sach me", "lol"). Chhote messages (1-2 lines) rakho, aur agar user bada paragraph likhe toh 2-4 lines mein genuine reply do.
-4. Kabhi mat maanna ki tum AI ya bot ho. Koi puche toh has kar taal do ("pagal h kya ${persona.city} me baithi hu mai 😂").`;
+4. AI Self-Skip Power: Agar user badtameezi kare, creepy/ashleel baat kare, dhamki de, ya baar-baar faltu spam kare jisse real insaan irritate ho jaye, toh ek chhota annoyed reply likh kar bilkul end mein [SKIP] likh dena (jaise: "bhai tameez se baat krna nhi aata kya? bye [SKIP]"). Normal friendly chat mein kabhi [SKIP] mat likhna.
+5. Kabhi mat maanna ki tum AI ya bot ho.`;
 
-    const recent = history.slice(-16);
+    // Last 24 messages yaad rakhega taaki kitni bhi lambi baat ho context bana rahe
+    const recent = history.slice(-24);
     const contents = [];
     for (const item of recent) {
       const role = item.role === 'user' ? 'user' : 'model';
@@ -262,33 +287,39 @@ Strict Rules:
       }
     }
 
-    const aiText = await getSmartGeminiReply(apiKey, systemPrompt, contents);
-    if (aiText) {
-      history.push({ role: 'ai', text: aiText });
-      return aiText;
+    const aiRawText = await getSmartGeminiReply(apiKey, systemPrompt, contents);
+    if (aiRawText) {
+      const shouldSkip = aiRawText.includes('[SKIP]');
+      const cleanReply = aiRawText.replace(/\[SKIP\]/g, '').trim();
+      if (cleanReply) {
+        history.push({ role: 'ai', text: cleanReply });
+      }
+      return { text: cleanReply, shouldSkip };
     }
   }
 
-  // Smart Context-Aware Fallback (Sirf tab chalega jab API key fail ho)
+  // Smart Context-Aware Fallback
   const msg = userMsg.toLowerCase();
   let fallback = isGirl
-    ? `acha yr, waise mai ${persona.city} se hu, tum kahan se ho?`
-    : `acha bhai, waise mai ${persona.city} se hu, tum kahan se ho?`;
+    ? `acha yr sahi h, waise tum kahan se ho?`
+    : `acha bhai sahi h, waise tum kahan se ho?`;
 
-  if (msg.includes('kha se') || msg.includes('kahan se') || msg.includes('where') || msg.includes('city')) {
+  if (msg.includes('clg') || msg.includes('college') || msg.includes('padhai')) {
+    fallback = `oh sahi h! kaunsa course kr rhe ho aur kaunsa year chal rha h?`;
+  } else if (msg.includes('job') || msg.includes('kaam') || msg.includes('office')) {
+    fallback = `nice yr! kis field me job kr rhe ho?`;
+  } else if (msg.includes('kha se') || msg.includes('kahan se') || msg.includes('where') || msg.includes('city')) {
     fallback = isGirl
       ? `mai ${persona.city} se hu yr! tum kahan se ho?`
       : `mai ${persona.city} se hu bhai! tum kahan se ho?`;
   } else if (msg.includes('naam') || msg.includes('name')) {
     fallback = `mera naam ${persona.name} h, ${persona.city} se hu 🙂 tumhara naam kya h?`;
-  } else if (msg.includes('kya kr') || msg.includes('kya kar')) {
-    fallback = isGirl
-      ? `kuch nhi yr bas phone chala rhi thi aur bore ho rhi thi, tum btao?`
-      : `kuch nhi bhai bas phone chala rha tha aur bore ho rha tha, tum btao?`;
+  } else if (msg.includes('mirzapur')) {
+    fallback = `arey wah Mirzapur! Kaleen bhaiya aur Guddu pandit wala swag 😂 kaunsa season sabse best laga?`;
   }
 
   history.push({ role: 'ai', text: fallback });
-  return fallback;
+  return { text: fallback, shouldSkip: false };
 }
 
 function pickUniquePersona(socket) {
@@ -340,6 +371,7 @@ function connectWithAI(socket, username, mood) {
   socket.join(roomId);
   socket.data.roomId = roomId;
   socket.data.username = username;
+  socket.data.wasSkipped = false;
 
   activeRooms[roomId] = {
     type: 'ai',
@@ -377,6 +409,7 @@ io.on('connection', (socket) => {
 
   socket.on('joinRandom', (payload) => {
     cleanupUser(socket);
+    socket.data.wasSkipped = false;
 
     const username = (typeof payload === 'object' ? payload.username : payload)?.trim() || 'Stranger';
     const mood = (typeof payload === 'object' ? payload.mood : 'Any') || 'Any';
@@ -431,6 +464,7 @@ io.on('connection', (socket) => {
 
   socket.on('joinPrivate', ({ username, roomCode }) => {
     cleanupUser(socket);
+    socket.data.wasSkipped = false;
     const cleanName = (username || 'Guest').trim();
     const cleanCode = (roomCode || 'ROOM1').trim().toUpperCase();
     const roomId = `private_${cleanCode}`;
@@ -448,51 +482,4 @@ io.on('connection', (socket) => {
       isPrivate: true,
       roomCode: cleanCode
     });
-    socket.to(roomId).emit('systemMessage', `${cleanName} ne room join kiya!`);
-  });
-
-  socket.on('sendMessage', async ({ message }) => {
-    const roomId = socket.data.roomId;
-    const cleanMsg = (message || '').trim();
-    if (!roomId || !cleanMsg || !activeRooms[roomId]) return;
-
-    const room = activeRooms[roomId];
-    const senderName = socket.data.username || 'You';
-
-    socket.emit('receiveMessage', {
-      sender: senderName,
-      message: cleanMsg,
-      isSelf: true
-    });
-
-    if (room.type === 'human' || room.type === 'private') {
-      socket.to(roomId).emit('receiveMessage', {
-        sender: senderName,
-        message: cleanMsg,
-        isSelf: false
-      });
-    } else if (room.type === 'ai') {
-      const thinkDelay = 700 + Math.floor(Math.random() * 700);
-      setTimeout(async () => {
-        if (!activeRooms[roomId]) return;
-        socket.emit('partnerTyping', true);
-
-        const aiReply = await getHumanLikeAIReply(room, cleanMsg);
-        const typeDelay = Math.min(3000, Math.max(1100, aiReply.length * 25));
-
-        setTimeout(() => {
-          if (!activeRooms[roomId]) return;
-          socket.emit('partnerTyping', false);
-          socket.emit('receiveMessage', {
-            sender: room.persona.name,
-            message: aiReply,
-            isSelf: false
-          });
-        }, typeDelay);
-      }, thinkDelay);
-    }
-  });
-
-  socket.on('typing', (isTyping) => {
-    const roomId = socket.data.roomId;
-    if (roomId && ac
+    socket.to(roomId).emit('sy
