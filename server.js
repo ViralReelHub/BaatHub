@@ -160,6 +160,7 @@ function cleanupUser(socket) {
   const roomId = socket.data.roomId;
   if (roomId && activeRooms[roomId]) {
     const room = activeRooms[roomId];
+    if (room.replyTimer) clearTimeout(room.replyTimer);
     if (room.type === 'human') {
       socket.to(roomId).emit('partnerLeft', 'Saamne wala user chat chhod kar chala gaya.');
       delete activeRooms[roomId];
@@ -196,7 +197,7 @@ async function getHumanLikeAIReply(room, userMsg) {
 Rules:
 1. User ke message ko dhyan se padhkar seedha usi ka natural jawab do.
 2. ${genderRule}
-3. Casual lowercase Hinglish ("yr", "acha", "hn", "nhi", "lol") mein WhatsApp style reply do.
+3. Casual lowercase Hinglish ("yr", "acha", "hn", "nhi", "lol") mein WhatsApp style chhota reply (1-2 lines) do.
 4. Agar user badtameezi, creepy/vulgar baat ya spam kare toh annoyed reply likh kar end mein [SKIP] likh dena. Normal chat me [SKIP] mat likhna.
 5. Kabhi mat maanna ki tum AI ho.`;
 
@@ -231,6 +232,72 @@ Rules:
   return { text: fallback, shouldSkip: false };
 }
 
+// Human-Like Paced Reply Scheduler (Read Delay + Natural Typing Speed + Multi-Msg Buffer)
+function scheduleHumanAIReply(socket, roomId, debounceMs = 1800) {
+  const room = activeRooms[roomId];
+  if (!room || room.type !== 'ai') return;
+
+  if (room.replyTimer) clearTimeout(room.replyTimer);
+
+  room.replyTimer = setTimeout(() => {
+    const currentRoom = activeRooms[roomId];
+    if (!currentRoom || currentRoom.isReplying) return;
+    if (!currentRoom.pendingMsgs || currentRoom.pendingMsgs.length === 0) return;
+
+    currentRoom.isReplying = true;
+    const combinedMsg = currentRoom.pendingMsgs.splice(0).join('\n');
+
+    // Step 1: Natural "Reading" Delay (2.0s se 4.0s) before typing starts
+    const readDelay = Math.min(4000, 1900 + combinedMsg.length * 18 + Math.floor(Math.random() * 900));
+
+    setTimeout(async () => {
+      if (!activeRooms[roomId]) return;
+      socket.emit('partnerTyping', true);
+
+      const apiStart = Date.now();
+      const aiResult = await getHumanLikeAIReply(currentRoom, combinedMsg);
+      const apiElapsed = Date.now() - apiStart;
+
+      // Step 2: Realistic Mobile Typing Speed (~65ms per char, min 2.4s, max 7.5s)
+      const replyLen = (aiResult.text || '').length;
+      const naturalTypeTime = Math.min(7500, Math.max(2400, replyLen * 65 + Math.floor(Math.random() * 900)));
+      const remainingTypeDelay = Math.max(1500, naturalTypeTime - apiElapsed);
+
+      setTimeout(() => {
+        if (!activeRooms[roomId]) return;
+        socket.emit('partnerTyping', false);
+        currentRoom.isReplying = false;
+
+        if (aiResult.text) {
+          socket.emit('receiveMessage', {
+            sender: currentRoom.persona.name,
+            message: aiResult.text,
+            isSelf: false
+          });
+        }
+
+        if (aiResult.shouldSkip) {
+          setTimeout(() => {
+            if (!activeRooms[roomId]) return;
+            const partnerName = currentRoom.persona.name;
+            delete activeRooms[roomId];
+            socket.leave(roomId);
+            socket.data.roomId = null;
+            socket.data.wasSkipped = true;
+            socket.emit('partnerLeft', `${partnerName} ne chat skip kar di.`);
+          }, 1200);
+          return;
+        }
+
+        // Agar typing ke dauran user ne aur messages bheje hon toh unka bhi jawab dein
+        if (currentRoom.pendingMsgs && currentRoom.pendingMsgs.length > 0) {
+          scheduleHumanAIReply(socket, roomId, 1600);
+        }
+      }, remainingTypeDelay);
+    }, readDelay);
+  }, debounceMs);
+}
+
 function pickUniquePersona(socket) {
   if (!socket.data.seenPersonas) socket.data.seenPersonas = new Set();
   let available = aiPersonas.filter(p => !socket.data.seenPersonas.has(p.name));
@@ -256,9 +323,19 @@ function connectWithAI(socket, username, mood) {
   socket.data.username = username;
   socket.data.wasSkipped = false;
 
-  activeRooms[roomId] = { type: 'ai', persona, mood: mood || 'Any', opener, history: [] };
+  activeRooms[roomId] = {
+    type: 'ai',
+    persona,
+    mood: mood || 'Any',
+    opener,
+    history: [],
+    pendingMsgs: [],
+    replyTimer: null,
+    isReplying: false
+  };
   socket.emit('chatStarted', { partnerName: persona.name, isPrivate: false });
 
+  // Pehle greeting bhejne se pehle bhi natural pause (2s + 2.4s typing)
   setTimeout(() => {
     if (!activeRooms[roomId]) return;
     socket.emit('partnerTyping', true);
@@ -267,8 +344,8 @@ function connectWithAI(socket, username, mood) {
       socket.emit('partnerTyping', false);
       activeRooms[roomId].history.push({ role: 'ai', text: opener });
       socket.emit('receiveMessage', { sender: persona.name, message: opener, isSelf: false });
-    }, 1400);
-  }, 900);
+    }, 2400);
+  }, 1800);
 }
 
 io.on('connection', (socket) => {
@@ -347,7 +424,16 @@ io.on('connection', (socket) => {
         roomId = `ai_${socket.id}_${Date.now()}`;
         socket.join(roomId);
         socket.data.roomId = roomId;
-        activeRooms[roomId] = { type: 'ai', persona, mood: payload?.mood || 'Any', opener: `hey! mai ${persona.name} 🙂`, history: [] };
+        activeRooms[roomId] = {
+          type: 'ai',
+          persona,
+          mood: payload?.mood || 'Any',
+          opener: `hey! mai ${persona.name} 🙂`,
+          history: [],
+          pendingMsgs: [],
+          replyTimer: null,
+          isReplying: false
+        };
       }
     }
 
@@ -358,38 +444,22 @@ io.on('connection', (socket) => {
     if (room.type === 'human' || room.type === 'private') {
       socket.to(roomId).emit('receiveMessage', { sender: senderName, message: cleanMsg, isSelf: false });
     } else if (room.type === 'ai') {
-      setTimeout(async () => {
-        if (!activeRooms[roomId]) return;
-        socket.emit('partnerTyping', true);
-        const aiResult = await getHumanLikeAIReply(room, cleanMsg);
-        const typeDelay = Math.min(2500, Math.max(900, (aiResult.text || '').length * 25));
-
-        setTimeout(() => {
-          if (!activeRooms[roomId]) return;
-          socket.emit('partnerTyping', false);
-          if (aiResult.text) {
-            socket.emit('receiveMessage', { sender: room.persona.name, message: aiResult.text, isSelf: false });
-          }
-          if (aiResult.shouldSkip) {
-            setTimeout(() => {
-              if (!activeRooms[roomId]) return;
-              const partnerName = room.persona.name;
-              delete activeRooms[roomId];
-              socket.leave(roomId);
-              socket.data.roomId = null;
-              socket.data.wasSkipped = true;
-              socket.emit('partnerLeft', `${partnerName} ne chat skip kar di.`);
-            }, 800);
-          }
-        }, typeDelay);
-      }, 600);
+      if (!room.pendingMsgs) room.pendingMsgs = [];
+      room.pendingMsgs.push(cleanMsg);
+      scheduleHumanAIReply(socket, roomId, 1800);
     }
   });
 
   socket.on('typing', (isTyping) => {
     const roomId = socket.data.roomId;
-    if (roomId && activeRooms[roomId] && activeRooms[roomId].type !== 'ai') {
+    if (!roomId || !activeRooms[roomId]) return;
+    const room = activeRooms[roomId];
+
+    if (room.type !== 'ai') {
       socket.to(roomId).emit('partnerTyping', isTyping);
+    } else if (isTyping && room.pendingMsgs && room.pendingMsgs.length > 0 && !room.isReplying) {
+      // Agar user agla message type kar raha hai toh AI thoda aur rukega
+      scheduleHumanAIReply(socket, roomId, 2000);
     }
   });
 
@@ -402,4 +472,4 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Server running on ${PORT}`));
-                       
+                      
