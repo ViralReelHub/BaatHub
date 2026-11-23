@@ -11,68 +11,114 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/privacy', (req, res) => res.send('<h1>Privacy Policy - BaatHub</h1><p>Hum chats save nahi karte.</p><a href="/">Back</a>'));
 app.get('/terms', (req, res) => res.send('<h1>Terms - BaatHub</h1><p>Sabhyata banaye rakhein.</p><a href="/">Back</a>'));
 
-let cachedModel = null;
-let lastError = 'None';
+let activeModel = null;
+let lastApiError = 'No API call yet';
 
-async function callGemini(model, key, sys, contents, useThink = true) {
+async function fetchTimed(url, opts = {}, ms = 9000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
   try {
-    const genConfig = { temperature: 0.95, maxOutputTokens: 250 };
-    if (useThink) genConfig.thinkingConfig = { thinkingBudget: 0 };
-
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: sys }] }, contents, generationConfig: genConfig })
-    });
-    const data = await res.json();
-    if (!res.ok || data.error) {
-      const msg = data?.error?.message || res.statusText;
-      if (useThink && /thinking/i.test(msg)) return callGemini(model, key, sys, contents, false);
-      lastError = `${model}: ${msg}`;
-      return null;
-    }
-
-    const raw = (data?.candidates?.[0]?.content?.parts || []).filter(p => !p.thought && p.text).map(p => p.text).join('').trim();
-    const skip = /\[SKIP\]/i.test(raw);
-    const text = raw.replace(/\[SKIP\]/gi, '').replace(/^["'*]+|["'*]+$/g, '').trim();
-    if (!text) { lastError = `${model}: Empty`; return null; }
-    lastError = null;
-    return { text, skip };
-  } catch (e) { lastError = e.message; return null; }
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
 }
 
-async function askAI(key, sys, contents) {
-  if (cachedModel) {
-    const ok = await callGemini(cachedModel, key, sys, contents);
-    if (ok) return ok;
-    cachedModel = null;
-  }
-  const tried = ['gemini-3.0-flash', 'gemini-3-flash-preview', 'gemini-flash-latest', 'gemini-2.5-flash'];
-  for (const m of tried) {
-    const ok = await callGemini(m, key, sys, contents);
-    if (ok) { cachedModel = m; return ok; }
-  }
+function cleanOutput(raw) {
+  if (!raw) return '';
+  return raw
+    .replace(/\[SKIP\]/gi, '')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line && !/^(thought|thinking|building|refining|draft|note|\*|\-)/i.test(line))
+    .join(' ')
+    .replace(/^["'`]+|["'`]+$/g, '')
+    .trim();
+}
+
+async function queryGemini(model, key, sysPrompt, contents) {
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
-    const d = await r.json();
-    const bad = ['image', 'tts', 'audio', 'vision', 'embedding', 'aqa', 'robotics', 'computer', 'learnlm', 'bisect'];
-    const models = (d.models || [])
-      .filter(m => (m.supportedGenerationMethods || []).includes('generateContent') && m.name.includes('gemini') && !bad.some(b => m.name.toLowerCase().includes(b)))
-      .map(m => m.name.replace('models/', ''))
-      .filter(m => !tried.includes(m));
-    for (const m of models.slice(0, 4)) {
-      const ok = await callGemini(m, key, sys, contents);
-      if (ok) { cachedModel = m; return ok; }
+    const res = await fetchTimed(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: sysPrompt }] },
+          contents,
+          generationConfig: { temperature: 0.95, maxOutputTokens: 250 }
+        })
+      },
+      9000
+    );
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      lastApiError = `${model}: ${data?.error?.message || res.statusText}`;
+      return null;
     }
-  } catch (e) { lastError = e.message; }
+    const raw = (data?.candidates?.[0]?.content?.parts || [])
+      .filter(p => !p.thought && typeof p.text === 'string')
+      .map(p => p.text)
+      .join('')
+      .trim();
+
+    const skip = /\[SKIP\]/i.test(raw);
+    const text = cleanOutput(raw);
+    if (!text) {
+      lastApiError = `${model}: Empty output`;
+      return null;
+    }
+    lastApiError = null;
+    return { text, skip };
+  } catch (err) {
+    lastApiError = `${model}: ${err.name === 'AbortError' ? 'Timeout' : err.message}`;
+    return null;
+  }
+}
+
+async function runPureAI(key, sysPrompt, contents) {
+  if (activeModel) {
+    const res = await queryGemini(activeModel, key, sysPrompt, contents);
+    if (res) return res;
+    activeModel = null;
+  }
+
+  const models = ['gemini-3.0-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];
+  for (const m of models) {
+    const res = await queryGemini(m, key, sysPrompt, contents);
+    if (res) {
+      activeModel = m;
+      return res;
+    }
+  }
+
+  try {
+    const listRes = await fetchTimed(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`, {}, 6000);
+    const listData = await listRes.json();
+    const skipWords = ['image', 'tts', 'audio', 'vision', 'embedding', 'aqa', 'robotics', 'computer', 'learnlm', 'bisect'];
+    const found = (listData.models || [])
+      .filter(m => (m.supportedGenerationMethods || []).includes('generateContent') && m.name.includes('gemini') && !skipWords.some(w => m.name.toLowerCase().includes(w)))
+      .map(m => m.name.replace('models/', ''))
+      .filter(m => !models.includes(m));
+
+    for (const m of found.slice(0, 4)) {
+      const res = await queryGemini(m, key, sysPrompt, contents);
+      if (res) {
+        activeModel = m;
+        return res;
+      }
+    }
+  } catch (e) {
+    lastApiError = e.message;
+  }
   return null;
 }
 
 app.get('/test-ai', async (req, res) => {
   const key = (process.env.GEMINI_API_KEY || '').trim();
   if (!key) return res.send('<h2>GEMINI_API_KEY missing on Render</h2>');
-  const out = await askAI(key, 'Reply in 5 words casually in Hinglish.', [{ role: 'user', parts: [{ text: 'aur bhai kya haal' }] }]);
-  res.send(out ? `<h2>✅ Working (${cachedModel})</h2><p>${out.text}</p><a href="/">Back to Chat</a>` : `<h2>❌ Error:</h2><pre>${lastError}</pre>`);
+  const out = await runPureAI(key, 'Reply naturally in 5 words in Hinglish.', [{ role: 'user', parts: [{ text: 'aur bhai kya haal hai' }] }]);
+  res.send(out ? `<h2>Pure AI Working (${activeModel})</h2><p>${out.text}</p><a href="/">Back to Chat</a>` : `<h2>API Error:</h2><pre>${lastApiError}</pre>`);
 });
 
 const baseOnline = Math.floor(Math.random() * 8) + 25;
@@ -107,85 +153,101 @@ function cleanup(socket) {
   }
 }
 
-async function generateReply(room, userMsg) {
+async function getPureAIReply(room, userMsg) {
   const isGirl = room.persona.gender === 'girl';
   if (isAbusive(userMsg)) {
     return { text: isGirl ? 'tameez se baat kr pehle 😒 bye' : 'faltu giri mat kr bhai, bye', skip: true };
   }
+
   room.history.push({ role: 'user', text: userMsg });
   const key = (process.env.GEMINI_API_KEY || '').trim();
+  if (!key) return null;
 
-  if (key) {
-    const month = new Date().toLocaleString('en-IN', { month: 'long', timeZone: 'Asia/Kolkata' });
-    const gRule = isGirl ? 'Use feminine Hindi verbs ("kr rhi hu", "baithi hu").' : 'Use masculine Hindi verbs ("kr rha hu", "baitha hu").';
-    const sys = `You are ${room.persona.name}, a ${room.persona.age}yo Indian ${isGirl ? 'girl' : 'boy'} from ${room.persona.city} chatting on BaatHub (mood: ${room.mood}, month: ${month} in India).
+  const month = new Date().toLocaleString('en-IN', { month: 'long', timeZone: 'Asia/Kolkata' });
+  const gRule = isGirl
+    ? 'Use feminine Hindi verbs ("kr rhi hu", "baithi hu", "karti hu").'
+    : 'Use masculine Hindi verbs ("kr rha hu", "baitha hu", "karta hu").';
+
+  const sysPrompt = `You are ${room.persona.name}, a ${room.persona.age}yo Indian ${isGirl ? 'girl' : 'boy'} from ${room.persona.city} chatting live on BaatHub (mood: ${room.mood}, month in India: ${month}).
 Rules:
-1. Text like a real Indian Gen-Z person on Instagram/WhatsApp: super short, natural, witty replies (3 to 14 words max, 1 line only).
-2. Directly reply to what the user just asked or sent (including Truth/Dare questions—answer them playfully like a real human).
-3. Match the user's language (English -> casual English; Hinglish -> casual lowercase Hinglish like "yr", "hn", "acha", "lol").
-4. REMEMBER everything the user said earlier in the conversation (their name, city, college/work, jokes). Never ask something they already told you!
-5. ${gRule} Never repeat a line you already sent. Never admit you are AI/bot.
-6. If user is rude/creepy/spamming, reply annoyed and add [SKIP] at the end.`;
+1. Text like a real Indian Gen-Z person on WhatsApp/Instagram: short, natural, witty replies (3 to 15 words max, 1 line only).
+2. Directly reply to what the user just asked or sent (answer Truth/Dare playfully like a real human).
+3. Match the user's language (English -> casual English; Hinglish -> lowercase casual Hinglish like "yr", "hn", "acha", "lol").
+4. REMEMBER everything the user said earlier in the chat (name, city, college/work, jokes). Never ask something they already told you.
+5. ${gRule} Never repeat a line you already sent. Never admit you are AI or a bot.
+6. If user is rude, creepy, or spamming, reply annoyed and add [SKIP] at the end.`;
 
-    const contents = [];
-    for (const h of room.history.slice(-30)) {
-      const role = h.role === 'user' ? 'user' : 'model';
-      if (!contents.length && role === 'model') continue;
-      if (contents.length && contents[contents.length - 1].role === role) contents[contents.length - 1].parts[0].text += '\n' + h.text;
-      else contents.push({ role, parts: [{ text: h.text }] });
-    }
-
-    const ai = await askAI(key, sys, contents);
-    if (ai && ai.text && !room.used.has(ai.text.toLowerCase())) {
-      room.used.add(ai.text.toLowerCase());
-      room.history.push({ role: 'ai', text: ai.text });
-      return ai;
+  const contents = [];
+  for (const h of room.history.slice(-30)) {
+    const role = h.role === 'user' ? 'user' : 'model';
+    if (!contents.length && role === 'model') continue;
+    if (contents.length && contents[contents.length - 1].role === role) {
+      contents[contents.length - 1].parts[0].text += '\n' + h.text;
+    } else {
+      contents.push({ role, parts: [{ text: h.text }] });
     }
   }
 
-  const backups = [
-    isGirl ? `acha nice yr, waise kya kr rhe ho abhi?` : `acha nice bhai, waise kya kr rha h abhi?`,
-    isGirl ? `yahan ${room.persona.city} me toh mast thand ho rhi h` : `yahan ${room.persona.city} me toh mast thand ho rhi h bhai`,
-    `haha sahi h, aur kya chal rha h life me?`
-  ];
-  const pick = backups.find(b => !room.used.has(b)) || backups[0];
-  room.used.add(pick);
-  room.history.push({ role: 'ai', text: pick });
-  return { text: pick, skip: false };
+  const ai = await runPureAI(key, sysPrompt, contents);
+  if (!ai || !ai.text) return null;
+
+  room.history.push({ role: 'ai', text: ai.text });
+  return ai;
 }
 
-function queueAIReply(socket, rid, delay = 1100) {
+function scheduleAI(socket, rid, delay = 900) {
   const room = rooms[rid];
   if (!room || room.type !== 'ai') return;
   if (room.timer) clearTimeout(room.timer);
+
   room.timer = setTimeout(async () => {
     const r = rooms[rid];
     if (!r || r.busy || !r.pending.length) return;
     r.busy = true;
-    const msg = r.pending.splice(0).join(' | ');
-    await new Promise(res => setTimeout(res, 1100));
-    if (!rooms[rid]) return;
-    socket.emit('partnerTyping', true);
-    const t0 = Date.now();
-    const res = await generateReply(r, msg);
-    await new Promise(res => setTimeout(res, Math.max(900, 2200 - (Date.now() - t0))));
-    if (!rooms[rid]) return;
-    socket.emit('partnerTyping', false);
-    r.busy = false;
-    if (res.text) socket.emit('receiveMessage', { sender: r.persona.name, message: res.text, isSelf: false });
-    if (res.skip) {
-      setTimeout(() => {
-        if (!rooms[rid]) return;
+
+    try {
+      const msg = r.pending.splice(0).join(' | ');
+      await new Promise(res => setTimeout(res, 800));
+      if (!rooms[rid]) return;
+
+      socket.emit('partnerTyping', true);
+      const t0 = Date.now();
+      const res = await getPureAIReply(r, msg);
+      const wait = Math.max(800, 1800 - (Date.now() - t0));
+      await new Promise(resolve => setTimeout(resolve, wait));
+      if (!rooms[rid]) return;
+
+      socket.emit('partnerTyping', false);
+
+      // Agar AI API fail ho toh fake backup line nahi bhejega, real user ki tarah disconnect hoga
+      if (!res) {
         const name = r.persona.name;
         delete rooms[rid];
         socket.leave(rid);
         socket.data.roomId = null;
         socket.data.skipped = true;
-        socket.emit('partnerLeft', `${name} ne chat skip kar di.`);
-      }, 800);
-      return;
+        socket.emit('partnerLeft', `${name} network issue ki wajah se disconnect ho gaya.`);
+        return;
+      }
+
+      socket.emit('receiveMessage', { sender: r.persona.name, message: res.text, isSelf: false });
+
+      if (res.skip) {
+        setTimeout(() => {
+          if (!rooms[rid]) return;
+          const name = r.persona.name;
+          delete rooms[rid];
+          socket.leave(rid);
+          socket.data.roomId = null;
+          socket.data.skipped = true;
+          socket.emit('partnerLeft', `${name} ne chat skip kar di.`);
+        }, 800);
+      }
+    } finally {
+      r.busy = false;
+      socket.emit('partnerTyping', false);
+      if (rooms[rid]?.pending?.length) scheduleAI(socket, rid, 800);
     }
-    if (r.pending.length) queueAIReply(socket, rid, 900);
   }, delay);
 }
 
@@ -201,14 +263,14 @@ function pickPersona(socket) {
 function connectAI(socket, username, mood) {
   const p = pickPersona(socket);
   const rid = `ai_${socket.id}_${Date.now()}`;
-  const openers = [`hey`, `heyy, kya haal h?`, `hi! kahan se ho?`];
-  const opener = openers[Math.floor(Math.random() * openers.length)];
+  const opener = 'hey';
   socket.join(rid);
   socket.data.roomId = rid;
   socket.data.username = username;
   socket.data.skipped = false;
-  rooms[rid] = { type: 'ai', persona: p, mood: mood || 'Any', history: [], used: new Set([opener]), pending: [], timer: null, busy: false };
+  rooms[rid] = { type: 'ai', persona: p, mood: mood || 'Any', history: [], pending: [], timer: null, busy: false };
   socket.emit('chatStarted', { partnerName: p.name, isPrivate: false });
+
   setTimeout(() => {
     if (!rooms[rid]) return;
     socket.emit('partnerTyping', true);
@@ -217,8 +279,8 @@ function connectAI(socket, username, mood) {
       socket.emit('partnerTyping', false);
       rooms[rid].history.push({ role: 'ai', text: opener });
       socket.emit('receiveMessage', { sender: p.name, message: opener, isSelf: false });
-    }, 1400);
-  }, 900);
+    }, 1100);
+  }, 700);
 }
 
 io.on('connection', (socket) => {
@@ -230,8 +292,10 @@ io.on('connection', (socket) => {
     const username = (typeof pl === 'object' ? pl.username : pl)?.trim() || 'Stranger';
     const mood = (typeof pl === 'object' ? pl.mood : 'Any') || 'Any';
     socket.data.username = username;
+
     let idx = queue.findIndex(u => u.mood === mood);
     if (idx === -1 && queue.length) idx = 0;
+
     if (idx !== -1) {
       const partner = queue.splice(idx, 1)[0];
       clearTimeout(partner.timer);
@@ -283,15 +347,15 @@ io.on('connection', (socket) => {
       const p = personas.find(x => x.name === (pl?.partnerName || '').trim()) || pickPersona(socket);
       rid = `ai_${socket.id}_${Date.now()}`;
       socket.join(rid); socket.data.roomId = rid;
-      rooms[rid] = { type: 'ai', persona: p, mood: pl?.mood || 'Any', history: [], used: new Set(), pending: [], timer: null, busy: false };
+      rooms[rid] = { type: 'ai', persona: p, mood: pl?.mood || 'Any', history: [], pending: [], timer: null, busy: false };
     }
     const r = rooms[rid];
     const sender = socket.data.username || 'You';
     socket.emit('receiveMessage', { sender, message: msg, image, isSelf: true });
     if (r.type !== 'ai') socket.to(rid).emit('receiveMessage', { sender, message: msg, image, isSelf: false });
     else {
-      r.pending.push(image ? `${msg || ''} [User sent a photo/meme]`.trim() : msg);
-      queueAIReply(socket, rid, 1000);
+      r.pending.push(image ? `${msg || ''} [User sent a photo]`.trim() : msg);
+      scheduleAI(socket, rid, 900);
     }
   });
 
