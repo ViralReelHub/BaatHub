@@ -1,4 +1,24 @@
-const socket = io();
+const socket = io({
+  reconnection: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 1000
+});
+
+// Touch & Layer Fix: Taaki neeche ka Ad Banner Send button ko block na kare
+(function fixChatTouchLayer() {
+  const style = document.createElement('style');
+  style.textContent = `
+    .chat-box, .message-form, #messageInput, .message-form button {
+      position: relative;
+      z-index: 25;
+    }
+    .ad-banner {
+      overflow: hidden;
+      z-index: 1;
+    }
+  `;
+  document.head.appendChild(style);
+})();
 
 // Elements
 const lobbySection = document.getElementById('lobbySection');
@@ -29,6 +49,14 @@ const payVipBtn = document.getElementById('payVipBtn');
 let selectedMood = 'Any';
 let currentRoomCode = '';
 let typingTimeout;
+let currentSession = {
+  active: false,
+  isPrivate: false,
+  partnerName: '',
+  roomCode: '',
+  mood: 'Any',
+  username: 'Stranger'
+};
 
 // WhatsApp-style Pop Sound
 function playPopSound() {
@@ -48,6 +76,12 @@ function playPopSound() {
     osc.start();
     osc.stop(ctx.currentTime + 0.09);
   } catch (e) {}
+}
+
+function setChatInputEnabled(enabled, customPlaceholder) {
+  messageInput.disabled = !enabled;
+  diceBtn.disabled = !enabled;
+  messageInput.placeholder = customPlaceholder || (enabled ? 'Apna message likhein...' : 'Chat khatam — naye partner ke liye "Next" dabayein');
 }
 
 // Mood Chips Selection
@@ -95,6 +129,7 @@ function openChatScreen(titleText, isPrivate) {
   chatTitle.textContent = titleText;
   typingStatus.textContent = '';
   messagesContainer.innerHTML = '';
+  setChatInputEnabled(true);
 
   if (isPrivate) {
     copyRoomBtn.classList.remove('hidden');
@@ -108,8 +143,17 @@ function openChatScreen(titleText, isPrivate) {
 // Start Random Chat
 function startRandomSearch() {
   const username = usernameInput.value.trim() || 'Stranger';
+  currentSession = {
+    active: true,
+    isPrivate: false,
+    partnerName: '',
+    roomCode: '',
+    mood: selectedMood,
+    username
+  };
   openChatScreen('Naya partner dhoondh rahe hain...', false);
   addSystemMessage('Kisi mast insaan se connect kiya ja raha hai...');
+  if (!socket.connected) socket.connect();
   socket.emit('joinRandom', { username, mood: selectedMood });
 }
 
@@ -124,8 +168,17 @@ privateChatBtn.addEventListener('click', () => {
   const username = usernameInput.value.trim() || 'Guest';
   const code = roomCodeInput.value.trim().toUpperCase() || 'DOST' + Math.floor(100 + Math.random() * 900);
   currentRoomCode = code;
+  currentSession = {
+    active: true,
+    isPrivate: true,
+    partnerName: `Room: ${code}`,
+    roomCode: code,
+    mood: selectedMood,
+    username
+  };
   openChatScreen(`Room: ${code}`, true);
   addSystemMessage(`Room code "${code}" doston ko share karein!`);
+  if (!socket.connected) socket.connect();
   socket.emit('joinPrivate', { username, roomCode: code });
 });
 
@@ -136,10 +189,34 @@ copyRoomBtn.addEventListener('click', () => {
 });
 
 leaveChatBtn.addEventListener('click', () => {
+  currentSession.active = false;
   socket.emit('leaveChat');
   chatSection.classList.add('hidden');
   lobbySection.classList.remove('hidden');
 });
+
+// Transmit Message with Auto-Reconnect Protection
+function transmitChatMessage(text) {
+  if (!currentSession.active) return;
+
+  const payload = {
+    message: text,
+    partnerName: currentSession.partnerName,
+    isPrivate: currentSession.isPrivate,
+    roomCode: currentSession.roomCode,
+    mood: currentSession.mood,
+    username: currentSession.username
+  };
+
+  if (socket.connected) {
+    socket.emit('sendMessage', payload);
+  } else {
+    socket.connect();
+    socket.once('connect', () => {
+      socket.emit('sendMessage', payload);
+    });
+  }
+}
 
 // Truth / Dare Icebreaker Dice Button
 const icebreakers = [
@@ -153,30 +230,39 @@ const icebreakers = [
 ];
 
 diceBtn.addEventListener('click', () => {
+  if (!currentSession.active) return;
   const randomPrompt = icebreakers[Math.floor(Math.random() * icebreakers.length)];
-  socket.emit('sendMessage', { message: randomPrompt });
+  transmitChatMessage(randomPrompt);
 });
 
 // Send Message
 messageForm.addEventListener('submit', (e) => {
   e.preventDefault();
+  if (!currentSession.active) return;
   const msg = messageInput.value.trim();
   if (!msg) return;
-  socket.emit('sendMessage', { message: msg });
-  socket.emit('typing', false);
+  transmitChatMessage(msg);
+  if (socket.connected) socket.emit('typing', false);
   messageInput.value = '';
 });
 
 messageInput.addEventListener('input', () => {
+  if (!socket.connected || !currentSession.active) return;
   socket.emit('typing', true);
   clearTimeout(typingTimeout);
-  typingTimeout = setTimeout(() => socket.emit('typing', false), 1000);
+  typingTimeout = setTimeout(() => {
+    if (socket.connected) socket.emit('typing', false);
+  }, 1000);
 });
 
 // Socket Listeners
 socket.on('chatStarted', ({ partnerName, isPrivate }) => {
+  currentSession.active = true;
+  currentSession.partnerName = partnerName;
+  currentSession.isPrivate = Boolean(isPrivate);
   messagesContainer.innerHTML = '';
   chatTitle.textContent = partnerName;
+  setChatInputEnabled(true);
   playPopSound();
   if (!isPrivate) {
     addSystemMessage(`Aap ${partnerName} se jud gaye hain! Say Hi 👋`);
@@ -199,7 +285,9 @@ socket.on('partnerTyping', (isTyping) => {
 });
 
 socket.on('partnerLeft', (msg) => {
+  currentSession.active = false;
   typingStatus.textContent = '';
+  setChatInputEnabled(false);
   addSystemMessage(msg + ' Naye partner ke liye "Next" dabayein.');
 });
 
