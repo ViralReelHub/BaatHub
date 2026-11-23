@@ -45,19 +45,44 @@ async function tryCall(m, key, sys, contents) {
 async function callAI(sys, contents) {
   const keys = getAllKeys();
   if (!keys.length) return null;
-  if (activeModel) { for (const k of keys) { const ok = await tryCall(activeModel, k, sys, contents); if (ok) return ok; } activeModel = null; }
+
+  const preferredModels = ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.0-flash'];
+
+  if (activeModel) {
+    for (const k of keys) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const ok = await tryCall(activeModel, k, sys, contents);
+        if (ok) return ok;
+        await new Promise(r => setTimeout(r, 400));
+      }
+    }
+    activeModel = null;
+  }
+
   for (const k of keys) {
     if (!discoveredModels.length) {
       try {
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${k}`);
         const d = await r.json();
-        const bad = ['image','tts','audio','vision','embedding','aqa','robotics','computer','learnlm','bisect'];
-        discoveredModels = (d.models || []).filter(m => (m.supportedGenerationMethods || []).includes('generateContent') && m.name.includes('gemini') && !bad.some(b => m.name.toLowerCase().includes(b))).map(m => m.name.replace('models/', ''));
-      } catch (e) { lastErr = e.message; }
+        const bad = ['image','tts','audio','vision','embedding','aqa','robotics','computer','learnlm','bisect','latest'];
+        discoveredModels = (d.models || [])
+          .filter(m => (m.supportedGenerationMethods || []).includes('generateContent') && m.name.includes('gemini') && !bad.some(b => m.name.toLowerCase().includes(b)))
+          .map(m => m.name.replace('models/', ''));
+      } catch (e) {
+        lastErr = e.message;
+      }
     }
-    for (const m of [...new Set(['gemini-2.5-flash-lite','gemini-2.0-flash','gemini-2.5-flash','gemini-3.0-flash','gemini-flash-latest',...discoveredModels])].slice(0, 5)) {
-      const ok = await tryCall(m, k, sys, contents);
-      if (ok) { activeModel = m; return ok; }
+
+    const candidates = [...new Set([...preferredModels, ...discoveredModels])].slice(0, 6);
+    for (const m of candidates) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const ok = await tryCall(m, k, sys, contents);
+        if (ok) {
+          activeModel = m;
+          return ok;
+        }
+        await new Promise(r => setTimeout(r, 350));
+      }
     }
   }
   return null;
