@@ -36,7 +36,7 @@ function extractGeminiText(data) {
 
 async function callGeminiOnce(modelName, apiKey, systemPrompt, contents) {
   try {
-    const body = { contents, generationConfig: { temperature: 1.0, maxOutputTokens: 500 } };
+    const body = { contents, generationConfig: { temperature: 0.95, maxOutputTokens: 350 } };
     if (systemPrompt) body.systemInstruction = { parts: [{ text: systemPrompt }] };
 
     const response = await fetch(
@@ -148,6 +148,17 @@ function isAbusive(text) {
   return /\b(mc|bc|bsdk|madarchod|bhenchod|behenchod|chutiya|chutiye|gandu|randi|harami|kamina|laude|lode|lund|chut|boobs|nude|nudes|sex|sexy|porn|xxx|fuck|fucking|bitch|asshole|dick|pussy|horny)\b/i.test(text);
 }
 
+function getIndiaSeasonContext() {
+  const now = new Date();
+  const monthName = now.toLocaleString('en-IN', { month: 'long', timeZone: 'Asia/Kolkata' });
+  const m = now.getMonth(); // 0 = Jan, 10 = Nov, 11 = Dec
+  let season = 'pleasant weather';
+  if (m >= 10 || m <= 1) season = 'thand / winter season (North India aur Delhi mein thand aur thoda pollution/fog rehta hai, garmi bilkul nahi hai)';
+  else if (m >= 2 && m <= 5) season = 'garmi / summer season';
+  else season = 'monsoon / baarish ka season';
+  return `Abhi India mein ${monthName} ka mahina chal raha hai (${season}).`;
+}
+
 let waitingQueue = [];
 const activeRooms = {};
 
@@ -160,7 +171,6 @@ function cleanupUser(socket) {
   const roomId = socket.data.roomId;
   if (roomId && activeRooms[roomId]) {
     const room = activeRooms[roomId];
-    if (room.replyTimer) clearTimeout(room.replyTimer);
     if (room.type === 'human') {
       socket.to(roomId).emit('partnerLeft', 'Saamne wala user chat chhod kar chala gaya.');
       delete activeRooms[roomId];
@@ -193,13 +203,18 @@ async function getHumanLikeAIReply(room, userMsg) {
       ? `Tum ek LADKI ho (${persona.name}), hamesha feminine Hindi verbs likhna ("kr rhi hu", "baithi hu", "karti hu").`
       : `Tum ek LADKA ho (${persona.name}), hamesha masculine Hindi verbs likhna ("kr rha hu", "baitha hu", "karta hu").`;
 
+    const seasonInfo = getIndiaSeasonContext();
+
     const systemPrompt = `Tum ek real Indian ${isGirl ? 'ladki' : 'ladka'} ho: ${persona.name}, age ${persona.age}, city ${persona.city}, vibe: ${persona.vibe}. Tum BaatHub par stranger se chat kar rahe ho (mood: "${mood}"). Pehla msg tha: "${opener}".
-Rules:
-1. User ke message ko dhyan se padhkar seedha usi ka natural jawab do.
-2. ${genderRule}
-3. Casual lowercase Hinglish ("yr", "acha", "hn", "nhi", "lol") mein WhatsApp style chhota reply (1-2 lines) do.
-4. Agar user badtameezi, creepy/vulgar baat ya spam kare toh annoyed reply likh kar end mein [SKIP] likh dena. Normal chat me [SKIP] mat likhna.
-5. Kabhi mat maanna ki tum AI ho.`;
+Current Mausam: ${seasonInfo}
+
+Strict Rules:
+1. Poori conversation history dhyan se padho! Agar user apna naam ya shehar (jaise "Delhi" ya "Rishu") pehle hi bata chuka hai, toh use YAAD RAKHO aur kabhi dobara "kahan se hai" ya "naam kya hai" mat poocho!
+2. User ne jo sabse aakhri baat ya sawal likha hai, seedha usi ka logical jawab do (jaise agar user bole "thand ke mausam me garmi kaise?" toh has kar galti maano ki "haha sorry yr dimaag ghoom gya tha, thand hi chal rhi h" ya joke maaro).
+3. ${genderRule}
+4. Chhota aur natural reply do: WhatsApp chat ki tarah sirf 1 chhoti line (max 12-18 words) lowercase casual Hinglish mein likho ("yr", "acha", "hn", "nhi", "lol"). Ek message mein 2-3 sawal ek saath kabhi mat poocho!
+5. Agar user badtameezi, creepy/vulgar baat ya spam kare toh annoyed reply likh kar end mein [SKIP] likh dena. Normal chat me [SKIP] mat likhna.
+6. Kabhi mat maanna ki tum AI ho.`;
 
     const recent = history.slice(-24);
     const contents = [];
@@ -223,16 +238,15 @@ Rules:
   }
 
   const msg = userMsg.toLowerCase();
-  let fallback = isGirl ? `acha yr sahi h, waise tum kahan se ho?` : `acha bhai sahi h, waise tum kahan se ho?`;
-  if (msg.includes('clg') || msg.includes('college')) fallback = `oh sahi h! kaunsa course kr rhe ho?`;
-  else if (msg.includes('kha se') || msg.includes('kahan se')) fallback = `mai ${persona.city} se hu! tum kahan se ho?`;
-  else if (msg.includes('naam') || msg.includes('name')) fallback = `mera naam ${persona.name} h, ${persona.city} se 🙂`;
+  let fallback = isGirl ? `haha sahi bol rhe ho yr, aur btao kya chal rha h?` : `haha sahi bol rha h bhai, aur bta kya chal rha h?`;
+  if (msg.includes('thand') || msg.includes('garmi')) fallback = `haha sorry yr dimaag ghoom gya tha 😂 thand hi chal rhi h full`;
+  else if (msg.includes('clg') || msg.includes('college')) fallback = `oh sahi h! kaunsa course kr rhe ho?`;
+  else if (msg.includes('kha se') || msg.includes('kahan se')) fallback = `mai ${persona.city} se hu!`;
 
   history.push({ role: 'ai', text: fallback });
   return { text: fallback, shouldSkip: false };
 }
 
-// Human-Like Paced Reply Scheduler (Read Delay + Natural Typing Speed + Multi-Msg Buffer)
 function scheduleHumanAIReply(socket, roomId, debounceMs = 1800) {
   const room = activeRooms[roomId];
   if (!room || room.type !== 'ai') return;
@@ -245,10 +259,10 @@ function scheduleHumanAIReply(socket, roomId, debounceMs = 1800) {
     if (!currentRoom.pendingMsgs || currentRoom.pendingMsgs.length === 0) return;
 
     currentRoom.isReplying = true;
-    const combinedMsg = currentRoom.pendingMsgs.splice(0).join('\n');
+    const msgs = currentRoom.pendingMsgs.splice(0);
+    const combinedMsg = msgs.length > 1 ? msgs.join(' | ') : msgs[0];
 
-    // Step 1: Natural "Reading" Delay (2.0s se 4.0s) before typing starts
-    const readDelay = Math.min(4000, 1900 + combinedMsg.length * 18 + Math.floor(Math.random() * 900));
+    const readDelay = Math.min(3800, 1800 + combinedMsg.length * 18 + Math.floor(Math.random() * 800));
 
     setTimeout(async () => {
       if (!activeRooms[roomId]) return;
@@ -258,10 +272,9 @@ function scheduleHumanAIReply(socket, roomId, debounceMs = 1800) {
       const aiResult = await getHumanLikeAIReply(currentRoom, combinedMsg);
       const apiElapsed = Date.now() - apiStart;
 
-      // Step 2: Realistic Mobile Typing Speed (~65ms per char, min 2.4s, max 7.5s)
       const replyLen = (aiResult.text || '').length;
-      const naturalTypeTime = Math.min(7500, Math.max(2400, replyLen * 65 + Math.floor(Math.random() * 900)));
-      const remainingTypeDelay = Math.max(1500, naturalTypeTime - apiElapsed);
+      const naturalTypeTime = Math.min(6500, Math.max(2200, replyLen * 60 + Math.floor(Math.random() * 800)));
+      const remainingTypeDelay = Math.max(1400, naturalTypeTime - apiElapsed);
 
       setTimeout(() => {
         if (!activeRooms[roomId]) return;
@@ -289,7 +302,6 @@ function scheduleHumanAIReply(socket, roomId, debounceMs = 1800) {
           return;
         }
 
-        // Agar typing ke dauran user ne aur messages bheje hon toh unka bhi jawab dein
         if (currentRoom.pendingMsgs && currentRoom.pendingMsgs.length > 0) {
           scheduleHumanAIReply(socket, roomId, 1600);
         }
@@ -335,7 +347,6 @@ function connectWithAI(socket, username, mood) {
   };
   socket.emit('chatStarted', { partnerName: persona.name, isPrivate: false });
 
-  // Pehle greeting bhejne se pehle bhi natural pause (2s + 2.4s typing)
   setTimeout(() => {
     if (!activeRooms[roomId]) return;
     socket.emit('partnerTyping', true);
@@ -344,8 +355,8 @@ function connectWithAI(socket, username, mood) {
       socket.emit('partnerTyping', false);
       activeRooms[roomId].history.push({ role: 'ai', text: opener });
       socket.emit('receiveMessage', { sender: persona.name, message: opener, isSelf: false });
-    }, 2400);
-  }, 1800);
+    }, 2200);
+  }, 1600);
 }
 
 io.on('connection', (socket) => {
@@ -450,26 +461,4 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('typing', (isTyping) => {
-    const roomId = socket.data.roomId;
-    if (!roomId || !activeRooms[roomId]) return;
-    const room = activeRooms[roomId];
-
-    if (room.type !== 'ai') {
-      socket.to(roomId).emit('partnerTyping', isTyping);
-    } else if (isTyping && room.pendingMsgs && room.pendingMsgs.length > 0 && !room.isReplying) {
-      // Agar user agla message type kar raha hai toh AI thoda aur rukega
-      scheduleHumanAIReply(socket, roomId, 2000);
-    }
-  });
-
-  socket.on('leaveChat', () => cleanupUser(socket));
-  socket.on('disconnect', () => {
-    cleanupUser(socket);
-    broadcastOnlineCount();
-  });
-});
-
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on ${PORT}`));
-                      
+  socket.on('t
