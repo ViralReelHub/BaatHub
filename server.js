@@ -8,13 +8,13 @@ const server = http.createServer(app);
 const io = new Server(server, { maxHttpBufferSize: 5e6, pingTimeout: 60000, pingInterval: 25000 });
 
 const extraKeys = [];
-const realGirlPics = ['https://randomuser.me/api/portraits/women/44.jpg','https://randomuser.me/api/portraits/women/65.jpg','https://randomuser.me/api/portraits/women/68.jpg','https://randomuser.me/api/portraits/women/12.jpg','https://randomuser.me/api/portraits/women/26.jpg','https://randomuser.me/api/portraits/women/33.jpg','https://randomuser.me/api/portraits/women/50.jpg','https://randomuser.me/api/portraits/women/79.jpg'];
+const realGirlPics = ['https://randomuser.me/api/portraits/women/44.jpg','https://randomuser.me/api/portraits/women/65.jpg','https://randomuser.me/api/portraits/women/68.jpg','https://randomuser.me/api/portraits/women/12.jpg','https://randomuser.me/api/portraits/women/26.jpg','https://randomuser.me/api/portraits/women/33.jpg','https://randomuser.me/api/portraits/women/50.jpg','https://randomuser.me/api/portraits/women/79.jpg','https://randomuser.me/api/portraits/women/85.jpg','https://randomuser.me/api/portraits/women/90.jpg'];
 const realBoyPics = ['https://randomuser.me/api/portraits/men/32.jpg','https://randomuser.me/api/portraits/men/45.jpg','https://randomuser.me/api/portraits/men/22.jpg','https://randomuser.me/api/portraits/men/11.jpg','https://randomuser.me/api/portraits/men/54.jpg','https://randomuser.me/api/portraits/men/67.jpg'];
 const realGifs = ['https://media.giphy.com/media/3o7abKhOpu0NwenH3O/giphy.gif','https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif','https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif','https://media.giphy.com/media/3oriO0OEd9QIDdllqo/giphy.gif'];
 
 app.use(express.static(path.join(__dirname, 'public')));
-app.get('/privacy', (req, res) => res.send('<h1>Privacy Policy</h1><a href="/">Back</a>'));
-app.get('/terms', (req, res) => res.send('<h1>Terms</h1><a href="/">Back</a>'));
+app.get('/privacy', (req, res) => res.send('<h1>Privacy Policy - BaatHub</h1><a href="/">Back</a>'));
+app.get('/terms', (req, res) => res.send('<h1>Terms - BaatHub</h1><a href="/">Back</a>'));
 
 function getAllKeys() {
   const envKey = (process.env.GEMINI_API_KEY || '').trim();
@@ -28,7 +28,7 @@ async function tryCall(m, key, sys, contents) {
     const ctrl = new AbortController(), t = setTimeout(() => ctrl.abort(), 8500);
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal,
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: sys }] }, contents, generationConfig: { temperature: 0.95, maxOutputTokens: 250 } })
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: sys }] }, contents, generationConfig: { temperature: 0.95, maxOutputTokens: 220 } })
     });
     clearTimeout(t);
     const d = await r.json();
@@ -69,21 +69,29 @@ app.get('/test-ai', async (req, res) => {
   res.send(out ? `<h2>✅ Working (${activeModel})</h2><p>${out.text}</p><a href="/">Back</a>` : `<h2>❌ Error:</h2><pre>${lastErr}</pre>`);
 });
 
-// 500+ Online Counter with live fluctuation
-const baseOnline = 515 + Math.floor(Math.random() * 25);
-let liveJitter = Math.floor(Math.random() * 15);
-const getOnlineCount = () => Math.max(508, baseOnline + (io.engine.clientsCount || 1) + liveJitter);
-setInterval(() => { liveJitter = Math.floor(Math.random() * 24) - 6; io.emit('onlineCount', getOnlineCount()); }, 8000);
+// 10k+ Live Online Counter
+const baseLive = 10240 + Math.floor(Math.random() * 180);
+let liveOffset = Math.floor(Math.random() * 45);
+const getLiveCount = () => Math.max(10150, baseLive + (io.engine.clientsCount || 1) + liveOffset);
+setInterval(() => { liveOffset = Math.floor(Math.random() * 90) - 25; io.emit('onlineCount', getLiveCount()); }, 8000);
 
-const personas = [['Sneha','girl',20,'Delhi',0],['Aarav','boy',21,'Mumbai',0],['Priya','girl',19,'Jaipur',1],['Rohan','boy',22,'Pune',1],['Ananya','girl',20,'Lucknow',2],['Kabir','boy',21,'Indore',2],['Riya','girl',21,'Chandigarh',3],['Dev','boy',20,'Noida',3],['Kavya','girl',19,'Bhopal',4],['Aditya','boy',22,'Bengaluru',4],['Nidhi','girl',20,'Patna',5],['Yash','boy',21,'Ahmedabad',5],['Tanya','girl',21,'Gurugram',6],['Karan','boy',23,'Dehradun',6],['Simran','girl',20,'Amritsar',7],['Harsh','boy',19,'Kanpur',7]].map(([name,gender,age,city,picIdx]) => ({name,gender,age,city,picIdx}));
+// 100 Personas: 75 Girls + 25 Boys
+const cities = ['Delhi','Mumbai','Jaipur','Pune','Lucknow','Indore','Chandigarh','Noida','Bhopal','Bengaluru','Patna','Ahmedabad','Gurugram','Dehradun','Amritsar','Kanpur','Kolkata','Hyderabad','Varanasi','Surat','Ranchi','Jodhpur'];
+const girlNames = ['Sneha','Priya','Ananya','Riya','Kavya','Nidhi','Tanya','Simran','Meera','Pooja','Isha','Shreya','Aisha','Diya','Kritika','Neha','Tanvi','Palak','Rhea','Aditi','Anushka','Sanya','Kashish','Avni','Mansi','Sakshi','Prachi','Khushi','Nandini','Jyoti','Aarti','Bhavna','Charu','Damini','Esha','Falguni','Garima','Harshita','Ira','Jiya','Kajal','Lavanya','Mahima','Navya','Ojasvi','Payal','Radhika','Srishti','Trisha','Urvi','Vaishali','Yamini','Zoya','Aarohi','Bhoomi','Chhavi','Deepika','Ekta','Gauri','Hema','Inaaya','Jhanvi','Kiara','Leena','Madhuri','Naina','Pihu','Ritu','Swati','Tara','Unnati','Vidya','Yukti','Aanchal','Bina'];
+const boyNames = ['Aarav','Rohan','Kabir','Dev','Aditya','Yash','Karan','Harsh','Siddharth','Manish','Vikram','Nikhil','Arjun','Vivaan','Rishabh','Kunal','Samar','Aman','Pranav','Dhruv','Tarun','Varun','Rahul','Saurabh','Mohit'];
+
+const personas = [
+  ...girlNames.map((name, i) => ({ name, gender: 'girl', age: 18 + (i % 6), city: cities[i % cities.length], picIdx: i % realGirlPics.length })),
+  ...boyNames.map((name, i) => ({ name, gender: 'boy', age: 19 + (i % 6), city: cities[(i + 5) % cities.length], picIdx: i % realBoyPics.length }))
+];
+
 const isAbusive = t => /\b(mc|bc|bsdk|madarchod|bhenchod|behenchod|chutiya|chutiye|gandu|randi|harami|kamina|laude|lode|lund|chut|boobs|nude|nudes|sex|sexy|porn|xxx|fuck|fucking|bitch|asshole|dick|pussy|horny)\b/i.test(t);
 
 function rememberUserInfo(room, text) {
-  const cities = ['delhi','mumbai','lucknow','jaipur','patna','kanpur','noida','pune','indore','bhopal','kolkata','chandigarh','agra','varanasi','surat','ahmedabad','hyderabad','bangalore','bengaluru','ranchi','dehradun','amritsar','jodhpur','nagpur','gurugram','gurgaon','ghaziabad'];
   const lower = text.toLowerCase();
-  for (const c of cities) { if (lower.includes(c)) { room.mem.city = c.charAt(0).toUpperCase() + c.slice(1); break; } }
+  for (const c of cities) { if (lower.includes(c.toLowerCase())) { room.mem.city = c; break; } }
   const nm = text.match(/(?:naam|name|mai|me|main)\s+(?:hai\s+|h\s+)?([a-zA-Z]{3,15})/i);
-  if (nm && !cities.includes(nm[1].toLowerCase()) && !['delhi','se','hu','hoon','bhi','kya','aur','theek','mast','pic','photo'].includes(nm[1].toLowerCase())) room.mem.name = nm[1];
+  if (nm && !cities.map(x => x.toLowerCase()).includes(nm[1].toLowerCase()) && !['delhi','se','hu','hoon','bhi','kya','aur','theek','mast','pic','photo'].includes(nm[1].toLowerCase())) room.mem.name = nm[1];
 }
 
 function humanFallback(room, userMsg) {
@@ -96,9 +104,7 @@ function humanFallback(room, userMsg) {
   if (m.includes('kahan') || m.includes('kha se') || m.includes('city')) return room.mem.city ? `mai ${room.persona.city} se hu! tum toh ${room.mem.city} se ho na?` : `mai ${room.persona.city} se hu! tum kahan se ho?`;
   if (m.includes('clg') || m.includes('college') || m.includes('padhai') || m.includes('job')) return isGirl ? `mai abhi clg me hu yr, tum kya kr rhe ho?` : `mai abhi clg me hu bhai, tu kya kr rha h?`;
   if (m.includes('kya kr') || m.includes('kya kar') || m.includes('kya chal')) return isGirl ? `kuch khas nhi yr bas phone chala rhi hu, tum btao?` : `kuch khas nhi bhai bas phone chala rha hu, tu bta?`;
-  if (m.includes('truth')) return `sach btau toh kabhi kabhi bina wajah late night jagti hu 😂`;
-  if (m.includes('dare')) return `chal dare accepted! apna last searched song batao abhi 🎵`;
-  const opts = isGirl ? [`${room.mem.name ? room.mem.name + ', ' : ''}acha nice yr! waise free time me kya krna pasand h?`,`haha sahi bol rhe ho yr, aur btao kya scene h?`,`yahan ${room.persona.city} me toh mast mausam h, tumhara din kaisa ja rha?`,`ek truth ya dare khelein kya? neeche dice dabao 🎲`] : [`${room.mem.name ? room.mem.name + ', ' : ''}acha nice bhai! waise free time me kya krna pasand h?`,`haha sahi bol rha h bhai, aur bta kya scene h?`,`yahan ${room.persona.city} me toh mast mausam h, tera din kaisa ja rha?`,`ek truth ya dare khelein kya? neeche dice dabao 🎲`];
+  const opts = isGirl ? [`${room.mem.name ? room.mem.name + ', ' : ''}acha nice yr! waise free time me kya krna pasand h?`,`haha sahi bol rhe ho yr, aur btao kya scene h?`,`yahan ${room.persona.city} me toh mast mausam h, tumhara din kaisa ja rha?`,`ek truth ya dare khelein kya? 🎲`] : [`${room.mem.name ? room.mem.name + ', ' : ''}acha nice bhai! waise free time me kya krna pasand h?`,`haha sahi bol rha h bhai, aur bta kya scene h?`,`yahan ${room.persona.city} me toh mast mausam h, tera din kaisa ja rha?`,`ek truth ya dare khelein kya? 🎲`];
   return opts.find(x => !room.used.has(x.toLowerCase())) || opts[room.count % opts.length];
 }
 
@@ -170,10 +176,11 @@ function scheduleAI(s, rid, delay = 900) {
   }, delay);
 }
 
-function connectAI(s, username, mood) {
+function connectAI(s, username, mood, genderFilter = 'any') {
   if (!s.data.seen) s.data.seen = new Set();
-  let list = personas.filter(p => !s.data.seen.has(p.name));
-  if (!list.length) { s.data.seen.clear(); list = personas; }
+  const basePool = genderFilter === 'girl' ? personas.filter(p => p.gender === 'girl') : personas;
+  let list = basePool.filter(p => !s.data.seen.has(p.name));
+  if (!list.length) { s.data.seen.clear(); list = basePool; }
   const p = list[Math.floor(Math.random() * list.length)];
   s.data.seen.add(p.name);
   const rid = `ai_${s.id}_${Date.now()}`;
@@ -184,24 +191,26 @@ function connectAI(s, username, mood) {
 }
 
 io.on('connection', (s) => {
-  s.emit('onlineCount', getOnlineCount());
+  s.emit('onlineCount', getLiveCount());
   s.on('joinRandom', (pl) => {
     cleanup(s); s.data.skipped = false;
-    const username = (typeof pl === 'object' ? pl.username : pl)?.trim() || 'Stranger', mood = (typeof pl === 'object' ? pl.mood : 'Any') || 'Any';
+    const username = (typeof pl === 'object' ? pl.username : pl)?.trim() || 'Stranger';
+    const mood = (typeof pl === 'object' ? pl.mood : 'Any') || 'Any';
+    const gFilter = (typeof pl === 'object' && pl.genderFilter === 'girl') ? 'girl' : 'any';
     s.data.username = username;
-    let idx = queue.findIndex(u => u.mood === mood);
-    if (idx === -1 && queue.length) idx = 0;
+    let idx = gFilter === 'girl' ? -1 : queue.findIndex(u => u.mood === mood);
+    if (idx === -1 && gFilter !== 'girl' && queue.length) idx = 0;
     if (idx !== -1) {
       const pt = queue.splice(idx, 1)[0]; clearTimeout(pt.timer);
       const ps = io.sockets.sockets.get(pt.socketId);
-      if (!ps) return connectAI(s, username, mood);
+      if (!ps) return connectAI(s, username, mood, gFilter);
       const rid = `human_${s.id}_${pt.socketId}`;
       s.join(rid); ps.join(rid); s.data.roomId = rid; ps.data.roomId = rid;
       rooms[rid] = { type: 'human' };
       s.emit('chatStarted', { partnerName: pt.username, isPrivate: false });
       ps.emit('chatStarted', { partnerName: username, isPrivate: false });
     } else {
-      const timer = setTimeout(() => { const i = queue.findIndex(u => u.socketId === s.id); if (i !== -1) { queue.splice(i, 1); connectAI(s, username, mood); } }, 6000);
+      const timer = setTimeout(() => { const i = queue.findIndex(u => u.socketId === s.id); if (i !== -1) { queue.splice(i, 1); connectAI(s, username, mood, gFilter); } }, 6000);
       queue.push({ socketId: s.id, username, mood, timer });
     }
   });
