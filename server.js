@@ -23,19 +23,34 @@ app.get('/terms', (req, res) => res.send(legalHtml('Terms & Conditions', `<h2>1.
 const getAllKeys = () => [...new Set([(process.env.GEMINI_API_KEY || '').trim(), ...extraKeys.map(k => k.trim())].filter(Boolean))];
 let activeModel = null, discoveredModels = [], lastErr = 'None';
 
-async function tryCall(m, key, sys, contents) {
+async function tryCall(m, key, sys, contents, maxTokens = 900) {
   try {
-    const ctrl = new AbortController(), t = setTimeout(() => ctrl.abort(), 7000);
+    const ctrl = new AbortController(), t = setTimeout(() => ctrl.abort(), 8500);
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal,
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: sys }] }, contents, generationConfig: { temperature: 0.9, maxOutputTokens: 220 } })
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: sys }] },
+        contents,
+        generationConfig: { temperature: 0.9, maxOutputTokens: maxTokens }
+      })
     });
     clearTimeout(t);
     const d = await r.json();
     if (!r.ok || d.error) { lastErr = `${m}: ${d?.error?.message || r.statusText}`; return null; }
-    const raw = (d?.candidates?.[0]?.content?.parts || []).filter(p => !p.thought && typeof p.text === 'string').map(p => p.text).join('').trim();
+    const raw = (d?.candidates?.[0]?.content?.parts || [])
+      .filter(p => !p.thought && typeof p.text === 'string')
+      .map(p => p.text)
+      .join('')
+      .trim();
     const skip = /\[SKIP\]/i.test(raw), sendPic = /\[SEND_PIC\]/i.test(raw), sendGif = /\[SEND_GIF\]/i.test(raw);
-    const text = raw.replace(/\[(SKIP|SEND_PIC|SEND_GIF)\]/gi, '').split('\n').map(x => x.trim()).filter(x => x && !/^(thought|thinking|building|refining|draft|\*)/i.test(x)).join(' ').replace(/^["'`]+|["'`]+$/g, '').trim();
+    const text = raw
+      .replace(/\[(SKIP|SEND_PIC|SEND_GIF)\]/gi, '')
+      .split('\n')
+      .map(x => x.trim())
+      .filter(x => x && !/^(thought|thinking|building|refining|draft|\*)/i.test(x))
+      .join(' ')
+      .replace(/^["'`]+|["'`]+$/g, '')
+      .trim();
     if (text || sendPic || sendGif) { lastErr = null; return { text, skip, sendPic, sendGif }; }
     lastErr = `${m}: Empty`;
   } catch (e) { lastErr = `${m}: ${e.message}`; }
