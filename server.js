@@ -7,21 +7,14 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { maxHttpBufferSize: 5e6, pingTimeout: 60000, pingInterval: 25000 });
 
-// Optional: Agar baad mein apni photos upload karein toh yahan links daal sakte hain
-const customMedia = {
-  girlPics: [],
-  boyPics: [],
-  gifs: [
-    'https://media.giphy.com/media/3o7abKhOpu0NwenH3O/giphy.gif',
-    'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif'
-  ]
-};
+// Optional: Baad me apni real photos/GIFs ke direct links yahan daal sakte hain
+const customMedia = { girlPics: [], boyPics: [], gifs: [] };
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/privacy', (req, res) => res.send('<h1>Privacy Policy - BaatHub</h1><p>Hum chats save nahi karte.</p><a href="/">Back</a>'));
 app.get('/terms', (req, res) => res.send('<h1>Terms - BaatHub</h1><p>Sabhyata banaye rakhein.</p><a href="/">Back</a>'));
 
-// Automatic Portrait & Animated Hinglish Reaction GIF Generator
+// Automatic Character Portrait & Animated Reaction GIF
 app.get('/ai-media', (req, res) => {
   const type = req.query.type === 'gif' ? 'gif' : 'pic';
   const name = String(req.query.name || 'Stranger').replace(/[^a-zA-Z0-9 ]/g, '').slice(0, 15);
@@ -39,76 +32,40 @@ app.get('/ai-media', (req, res) => {
       ['👀', 'NO WAYYY 👀', '#2563eb', '#06b6d4'],
       ['🙈', 'CHAL JHOOTHA 🙈', '#db2777', '#f43f5e'],
       ['🔥', 'VIBE HAI BHAI 🔥', '#ea580c', '#eab308'],
-      ['💀', 'HAHAHA DEAD 💀', '#4f46e5', '#9333ea'],
-      ['😉', 'SMOOTH YAAR 😉', '#059669', '#10b981']
+      ['💀', 'HAHAHA DEAD 💀', '#4f46e5', '#9333ea']
     ];
     const [emoji, label, c1, c2] = items[(seed + v) % items.length];
-    return res.send(`<svg xmlns='http://www.w3.org/2000/svg' width='260' height='175' viewBox='0 0 260 175'>
-      <defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0%' stop-color='${c1}'/><stop offset='100%' stop-color='${c2}'/></linearGradient></defs>
-      <rect width='260' height='175' rx='18' fill='url(#g)'/>
-      <circle cx='40' cy='35' r='22' fill='rgba(255,255,255,0.12)'/>
-      <circle cx='225' cy='140' r='28' fill='rgba(255,255,255,0.12)'/>
-      <text x='130' y='88' font-size='58' text-anchor='middle'>${emoji}<animateTransform attributeName='transform' type='scale' values='1;1.2;1' dur='0.85s' repeatCount='indefinite' additive='sum'/></text>
-      <rect x='35' y='120' width='190' height='30' rx='15' fill='rgba(0,0,0,0.5)'/>
-      <text x='130' y='140' fill='#fff' font-family='sans-serif' font-size='13' font-weight='bold' text-anchor='middle'>${label}</text>
-      <rect x='208' y='12' width='38' height='18' rx='9' fill='rgba(0,0,0,0.45)'/>
-      <text x='227' y='24' fill='#fff' font-family='sans-serif' font-size='10' font-weight='bold' text-anchor='middle'>GIF</text>
+    return res.send(`<svg xmlns="http://www.w3.org/2000/svg" width="250" height="165" viewBox="0 0 250 165">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${c1}"/><stop offset="100%" stop-color="${c2}"/></linearGradient></defs>
+      <rect width="250" height="165" rx="18" fill="url(#g)"/>
+      <text x="125" y="84" font-size="54" text-anchor="middle">${emoji}<animateTransform attributeName="transform" type="scale" values="1;1.18;1" dur="0.85s" repeatCount="indefinite" additive="sum"/></text>
+      <rect x="35" y="114" width="180" height="28" rx="14" fill="rgba(0,0,0,0.48)"/>
+      <text x="125" y="133" fill="#fff" font-family="sans-serif" font-size="12" font-weight="bold" text-anchor="middle">${label}</text>
     </svg>`);
   }
 
-  const bgs = isGirl
-    ? [['#be185d', '#6d28d9'], ['#9d174d', '#db2777'], ['#4338ca', '#ec4899'], ['#7e22ce', '#f43f5e']]
-    : [['#1d4ed8', '#0f766e'], ['#0f172a', '#2563eb'], ['#1e3a8a', '#4f46e5'], ['#065f46', '#0284c7']];
-  const [bg1, bg2] = bgs[(seed + v) % bgs.length];
-  const skins = ['#f8cbad', '#eab696', '#d99b78', '#f5cba7'];
-  const skin = skins[seed % skins.length];
-  const hairs = ['#18181b', '#271c19', '#3b2314', '#1e1b4b'];
-  const hair = hairs[(seed + 1) % hairs.length];
-  const tops = isGirl ? ['#f43f5e', '#a855f7', '#ec4899', '#38bdf8', '#fb7185'] : ['#3b82f6', '#10b981', '#6366f1', '#f59e0b', '#14b8a6'];
-  const top = tops[(seed + v) % tops.length];
-  const hasGlasses = seed % 3 === 0;
-  const snaps = isGirl
-    ? ['abhi ki click 🙈', 'full bore ho rhi thi ✨', 'kaisi lag rhi hu? 👀', 'just chilling 🌸']
-    : ['abhi ki snap 😎', 'full timepass mood 🔥', 'kya scene h bhai 👀', 'chilling scenes ✌️'];
-  const caption = snaps[(seed + v) % snaps.length];
+  const [bg1, bg2] = isGirl ? ['#be185d', '#6d28d9'] : ['#1d4ed8', '#0f766e'];
+  const skin = ['#f8cbad', '#eab696', '#d99b78'][seed % 3];
+  const hair = ['#18181b', '#271c19', '#3b2314'][seed % 3];
+  const top = isGirl ? ['#f43f5e', '#a855f7', '#38bdf8'][v % 3] : ['#3b82f6', '#10b981', '#f59e0b'][v % 3];
+  const caption = isGirl ? ['abhi ki click 🙈', 'bore ho rhi thi ✨', 'kaisi lag rhi hu? 👀'][v % 3] : ['abhi ki snap 😎', 'full chill mood 🔥', 'kya scene h bhai 👀'][v % 3];
+  const backHair = isGirl ? `<path d="M74 92 C70 155, 82 195, 92 205 L148 205 C158 195, 170 155, 166 92 Z" fill="${hair}"/>` : '';
 
-  const backHair = isGirl
-    ? `<path d='M74 92 C70 155, 82 195, 92 205 L148 205 C158 195, 170 155, 166 92 Z' fill='${hair}'/>`
-    : '';
-  const frontHair = isGirl
-    ? `<path d='M82 88 C82 50, 158 50, 158 88 C146 66, 118 66, 82 88 Z' fill='${hair}'/>`
-    : `<path d='M82 86 C80 48, 160 48, 158 86 C145 64, 95 64, 82 86 Z' fill='${hair}'/>`;
-  const glasses = hasGlasses
-    ? `<circle cx='106' cy='96' r='11' fill='none' stroke='#1e293b' stroke-width='2.5'/><circle cx='134' cy='96' r='11' fill='none' stroke='#1e293b' stroke-width='2.5'/><line x1='117' y1='96' x2='123' y2='96' stroke='#1e293b' stroke-width='2.5'/>`
-    : '';
-  const earrings = isGirl
-    ? `<circle cx='81' cy='105' r='3.5' fill='#fbbf24'/><circle cx='159' cy='105' r='3.5' fill='#fbbf24'/>`
-    : '';
-
-  res.send(`<svg xmlns='http://www.w3.org/2000/svg' width='240' height='275' viewBox='0 0 240 275'>
-    <defs><linearGradient id='p' x1='0' y1='0' x2='1' y2='1'><stop offset='0%' stop-color='${bg1}'/><stop offset='100%' stop-color='${bg2}'/></linearGradient></defs>
-    <rect width='240' height='275' rx='18' fill='#0f172a'/>
-    <rect x='10' y='10' width='220' height='215' rx='14' fill='url(#p)'/>
-    <circle cx='45' cy='45' r='26' fill='rgba(255,255,255,0.1)'/>
-    <circle cx='195' cy='65' r='18' fill='rgba(255,255,255,0.12)'/>
+  res.send(`<svg xmlns="http://www.w3.org/2000/svg" width="240" height="270" viewBox="0 0 240 270">
+    <defs><linearGradient id="p" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${bg1}"/><stop offset="100%" stop-color="${bg2}"/></linearGradient></defs>
+    <rect width="240" height="270" rx="18" fill="#0f172a"/>
+    <rect x="10" y="10" width="220" height="210" rx="14" fill="url(#p)"/>
     ${backHair}
-    <path d='M64 225 C66 174, 174 174, 176 225 Z' fill='${top}'/>
-    <rect x='109' y='132' width='22' height='28' rx='10' fill='${skin}'/>
-    <ellipse cx='120' cy='96' rx='38' ry='43' fill='${skin}'/>
-    ${frontHair}
-    ${earrings}
-    <circle cx='106' cy='96' r='4.2' fill='#1e293b'/><circle cx='107.5' cy='94.5' r='1.4' fill='#fff'/>
-    <circle cx='134' cy='96' r='4.2' fill='#1e293b'/><circle cx='135.5' cy='94.5' r='1.4' fill='#fff'/>
-    <ellipse cx='97' cy='107' rx='6' ry='3.5' fill='rgba(244,63,94,0.32)'/>
-    <ellipse cx='143' cy='107' rx='6' ry='3.5' fill='rgba(244,63,94,0.32)'/>
-    <path d='M110 115 Q120 124 130 115' fill='none' stroke='#9f1239' stroke-width='2.6' stroke-linecap='round'/>
-    ${glasses}
-    <rect x='10' y='184' width='220' height='28' fill='rgba(0,0,0,0.52)'/>
-    <text x='120' y='202' fill='#fff' font-family='sans-serif' font-size='12' font-weight='600' text-anchor='middle'>${caption}</text>
-    <rect x='20' y='20' width='68' height='20' rx='10' fill='rgba(0,0,0,0.45)'/>
-    <text x='54' y='34' fill='#fff' font-family='sans-serif' font-size='10' font-weight='bold' text-anchor='middle'>📸 SNAP</text>
-    <text x='18' y='246' fill='#f8fafc' font-family='sans-serif' font-size='13' font-weight='bold'>${name} • ${city}</text>
-    <text x='18' y='263' fill='#34d399' font-family='sans-serif' font-size='10' font-weight='600'>● Live Snap • Just now</text>
+    <path d="M64 220 C66 172, 174 172, 176 220 Z" fill="${top}"/>
+    <rect x="109" y="130" width="22" height="28" rx="10" fill="${skin}"/>
+    <ellipse cx="120" cy="95" rx="37" ry="42" fill="${skin}"/>
+    <path d="M82 86 C82 48, 158 48, 158 86 C145 64, 95 64, 82 86 Z" fill="${hair}"/>
+    <circle cx="106" cy="95" r="4" fill="#1e293b"/><circle cx="134" cy="95" r="4" fill="#1e293b"/>
+    <path d="M110 114 Q120 123 130 114" fill="none" stroke="#9f1239" stroke-width="2.5" stroke-linecap="round"/>
+    <rect x="10" y="182" width="220" height="26" fill="rgba(0,0,0,0.5)"/>
+    <text x="120" y="199" fill="#fff" font-family="sans-serif" font-size="12" font-weight="600" text-anchor="middle">${caption}</text>
+    <text x="18" y="242" fill="#f8fafc" font-family="sans-serif" font-size="13" font-weight="bold">${name} • ${city}</text>
+    <text x="18" y="259" fill="#34d399" font-family="sans-serif" font-size="10" font-weight="600">● Live Snap • Just now</text>
   </svg>`);
 });
 
@@ -118,11 +75,8 @@ let lastApiError = 'No API call yet';
 async function fetchTimed(url, opts = {}, ms = 9000) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), ms);
-  try {
-    return await fetch(url, { ...opts, signal: ctrl.signal });
-  } finally {
-    clearTimeout(t);
-  }
+  try { return await fetch(url, { ...opts, signal: ctrl.signal }); }
+  finally { clearTimeout(t); }
 }
 
 function cleanOutput(raw) {
@@ -130,8 +84,8 @@ function cleanOutput(raw) {
   return raw
     .replace(/\[(SKIP|SEND_PIC|SEND_GIF)\]/gi, '')
     .split('\n')
-    .map(line => line.trim())
-    .filter(line => line && !/^(thought|thinking|building|refining|draft|note|\*|\-)/i.test(line))
+    .map(l => l.trim())
+    .filter(l => l && !/^(thought|thinking|building|refining|draft|note|\*|\-)/i.test(l))
     .join(' ')
     .replace(/^["'`]+|["'`]+$/g, '')
     .trim();
@@ -153,25 +107,13 @@ async function queryGemini(model, key, sysPrompt, contents) {
       9000
     );
     const data = await res.json();
-    if (!res.ok || data.error) {
-      lastApiError = `${model}: ${data?.error?.message || res.statusText}`;
-      return null;
-    }
-    const raw = (data?.candidates?.[0]?.content?.parts || [])
-      .filter(p => !p.thought && typeof p.text === 'string')
-      .map(p => p.text)
-      .join('')
-      .trim();
-
+    if (!res.ok || data.error) { lastApiError = `${model}: ${data?.error?.message || res.statusText}`; return null; }
+    const raw = (data?.candidates?.[0]?.content?.parts || []).filter(p => !p.thought && typeof p.text === 'string').map(p => p.text).join('').trim();
     const skip = /\[SKIP\]/i.test(raw);
     const sendPic = /\[SEND_PIC\]/i.test(raw);
     const sendGif = /\[SEND_GIF\]/i.test(raw);
     const text = cleanOutput(raw);
-
-    if (!text && !sendPic && !sendGif) {
-      lastApiError = `${model}: Empty output`;
-      return null;
-    }
+    if (!text && !sendPic && !sendGif) { lastApiError = `${model}: Empty output`; return null; }
     lastApiError = null;
     return { text, skip, sendPic, sendGif };
   } catch (err) {
@@ -186,13 +128,11 @@ async function runPureAI(key, sysPrompt, contents) {
     if (res) return res;
     activeModel = null;
   }
-
   const models = ['gemini-3.0-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];
   for (const m of models) {
     const res = await queryGemini(m, key, sysPrompt, contents);
     if (res) { activeModel = m; return res; }
   }
-
   try {
     const listRes = await fetchTimed(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`, {}, 6000);
     const listData = await listRes.json();
@@ -201,14 +141,11 @@ async function runPureAI(key, sysPrompt, contents) {
       .filter(m => (m.supportedGenerationMethods || []).includes('generateContent') && m.name.includes('gemini') && !skipWords.some(w => m.name.toLowerCase().includes(w)))
       .map(m => m.name.replace('models/', ''))
       .filter(m => !models.includes(m));
-
     for (const m of found.slice(0, 4)) {
       const res = await queryGemini(m, key, sysPrompt, contents);
       if (res) { activeModel = m; return res; }
     }
-  } catch (e) {
-    lastApiError = e.message;
-  }
+  } catch (e) { lastApiError = e.message; }
   return null;
 }
 
@@ -254,25 +191,13 @@ function cleanup(socket) {
 function getMediaUrl(room, isGif) {
   const { name, gender, city } = room.persona;
   const idx = room.mediaCount++;
-
   if (isGif) {
-    const builtInGif = `/ai-media?type=gif&name=${encodeURIComponent(name)}&v=${idx}&t=${Date.now()}`;
-    const pool = [...(customMedia.gifs || []), builtInGif];
-    const unused = pool.filter(u => !room.usedMedia.has(u));
-    const pick = (unused.length ? unused : pool)[Math.floor(Math.random() * (unused.length || pool.length))];
-    room.usedMedia.add(pick);
-    return pick;
+    const builtIn = `/ai-media?type=gif&name=${encodeURIComponent(name)}&v=${idx}&t=${Date.now()}`;
+    const pool = [...(customMedia.gifs || []), builtIn];
+    return pool[Math.floor(Math.random() * pool.length)];
   }
-
   const list = gender === 'girl' ? customMedia.girlPics : customMedia.boyPics;
-  if (list && list.length > 0) {
-    const unused = list.filter(url => !room.usedMedia.has(url));
-    const pool = unused.length ? unused : list;
-    const chosen = pool[Math.floor(Math.random() * pool.length)];
-    room.usedMedia.add(chosen);
-    return chosen;
-  }
-
+  if (list && list.length > 0) return list[idx % list.length];
   return `/ai-media?type=pic&name=${encodeURIComponent(name)}&gender=${gender}&city=${encodeURIComponent(city)}&v=${idx}&t=${Date.now()}`;
 }
 
@@ -282,14 +207,18 @@ async function getPureAIReply(room, userMsg) {
     return { text: isGirl ? 'tameez se baat kr pehle 😒 bye' : 'faltu giri mat kr bhai, bye', skip: true, image: null };
   }
 
+  room.userMsgCount = (room.userMsgCount || 0) + 1;
   room.history.push({ role: 'user', text: userMsg });
   const key = (process.env.GEMINI_API_KEY || '').trim();
   if (!key) return null;
 
+  const canSendPicNow = room.userMsgCount >= 4;
   const month = new Date().toLocaleString('en-IN', { month: 'long', timeZone: 'Asia/Kolkata' });
-  const gRule = isGirl
-    ? 'Use feminine Hindi verbs ("kr rhi hu", "baithi hu", "karti hu").'
-    : 'Use masculine Hindi verbs ("kr rha hu", "baitha hu", "karta hu").';
+  const gRule = isGirl ? 'Use feminine Hindi verbs ("kr rhi hu", "baithi hu", "karti hu").' : 'Use masculine Hindi verbs ("kr rha hu", "baitha hu", "karta hu").';
+
+  const picRule = canSendPicNow
+    ? `User has chatted enough (${room.userMsgCount} messages). If user asks for your pic/selfie/photo now, agree playfully and append [SEND_PIC] at the end.`
+    : `IMPORTANT: User has only sent ${room.userMsgCount} messages so far. If user asks for your pic, selfie, or photo right now, DO NOT send any pic and DO NOT output [SEND_PIC]. Refuse playfully like a real person (e.g. "${isGirl ? 'arey abhi toh baat shuru hui h, pehle thodi jaan pehchan toh ho jaye 😂' : 'itni jaldi kya h bhai, pehle thodi baat toh kr le 😂'}").`;
 
   const sysPrompt = `You are ${room.persona.name}, a ${room.persona.age}yo Indian ${isGirl ? 'girl' : 'boy'} from ${room.persona.city} chatting live on BaatHub (mood: ${room.mood}, month in India: ${month}).
 Rules:
@@ -298,31 +227,28 @@ Rules:
 3. Match the user's language (English -> casual English; Hinglish -> lowercase casual Hinglish like "yr", "hn", "acha", "lol").
 4. REMEMBER everything the user said earlier in the chat (name, city, college/work, jokes). Never ask something they already told you.
 5. ${gRule} Never repeat a line you already sent. Never admit you are AI or a bot.
-6. If user asks for your pic, selfie, photo, or "kaisi dikhti ho/dikhte ho", reply playfully (e.g. ${isGirl ? '"ye lo abhi ki snap 🙈"' : '"ye le bhai abhi ki pic 😎"'}) and append [SEND_PIC] at the end.
-7. If user asks for a GIF/meme or cracks a funny joke, reply and append [SEND_GIF] at the end.
+6. ${picRule}
+7. If user asks for a GIF/meme, reply and append [SEND_GIF] at the end.
 8. If user is rude, creepy, or spamming, reply annoyed and append [SKIP] at the end.`;
 
   const contents = [];
   for (const h of room.history.slice(-30)) {
     const role = h.role === 'user' ? 'user' : 'model';
     if (!contents.length && role === 'model') continue;
-    if (contents.length && contents[contents.length - 1].role === role) {
-      contents[contents.length - 1].parts[0].text += '\n' + h.text;
-    } else {
-      contents.push({ role, parts: [{ text: h.text }] });
-    }
+    if (contents.length && contents[contents.length - 1].role === role) contents[contents.length - 1].parts[0].text += '\n' + h.text;
+    else contents.push({ role, parts: [{ text: h.text }] });
   }
 
   const ai = await runPureAI(key, sysPrompt, contents);
   if (!ai) return null;
 
-  const askedPic = /\b(pic|pics|photo|selfie|snaps?|dikhao|dikha)\b/i.test(userMsg);
+  const askedPic = /\b(pic|pics|photo|selfie|snaps?|dikhao|dikha|shakal|face)\b/i.test(userMsg);
   const askedGif = /\b(gif|meme)\b/i.test(userMsg);
 
   let image = null;
   if (ai.sendGif || askedGif) {
     image = getMediaUrl(room, true);
-  } else if (ai.sendPic || askedPic) {
+  } else if (canSendPicNow && (ai.sendPic || askedPic)) {
     image = getMediaUrl(room, false);
   }
 
@@ -365,12 +291,7 @@ function scheduleAI(socket, rid, delay = 900) {
         return;
       }
 
-      socket.emit('receiveMessage', {
-        sender: r.persona.name,
-        message: res.text,
-        image: res.image || null,
-        isSelf: false
-      });
+      socket.emit('receiveMessage', { sender: r.persona.name, message: res.text, image: res.image || null, isSelf: false });
 
       if (res.skip) {
         setTimeout(() => {
@@ -408,7 +329,7 @@ function connectAI(socket, username, mood) {
   socket.data.roomId = rid;
   socket.data.username = username;
   socket.data.skipped = false;
-  rooms[rid] = { type: 'ai', persona: p, mood: mood || 'Any', history: [], usedMedia: new Set(), mediaCount: 0, pending: [], timer: null, busy: false };
+  rooms[rid] = { type: 'ai', persona: p, mood: mood || 'Any', history: [], userMsgCount: 0, mediaCount: 0, pending: [], timer: null, busy: false };
   socket.emit('chatStarted', { partnerName: p.name, isPrivate: false });
 
   setTimeout(() => {
@@ -441,4 +362,55 @@ io.on('connection', (socket) => {
       clearTimeout(partner.timer);
       const ps = io.sockets.sockets.get(partner.socketId);
       if (!ps) return connectAI(socket, username, mood);
-      const rid = `human_$
+      const rid = `human_${socket.id}_${partner.socketId}`;
+      socket.join(rid); ps.join(rid);
+      socket.data.roomId = rid; ps.data.roomId = rid;
+      rooms[rid] = { type: 'human' };
+      socket.emit('chatStarted', { partnerName: partner.username, isPrivate: false });
+      ps.emit('chatStarted', { partnerName: username, isPrivate: false });
+    } else {
+      const timer = setTimeout(() => {
+        const i = queue.findIndex(u => u.socketId === socket.id);
+        if (i !== -1) { queue.splice(i, 1); connectAI(socket, username, mood); }
+      }, 6000);
+      queue.push({ socketId: socket.id, username, mood, timer });
+    }
+  });
+
+  socket.on('joinPrivate', ({ username, roomCode }) => {
+    cleanup(socket);
+    socket.data.skipped = false;
+    const name = (username || 'Guest').trim();
+    const code = (roomCode || 'ROOM1').trim().toUpperCase();
+    const rid = `private_${code}`;
+    socket.join(rid);
+    socket.data.roomId = rid;
+    socket.data.username = name;
+    if (!rooms[rid]) rooms[rid] = { type: 'private' };
+    socket.emit('chatStarted', { partnerName: `Room: ${code}`, isPrivate: true, roomCode: code });
+    socket.to(rid).emit('systemMessage', `${name} ne room join kiya!`);
+  });
+
+  socket.on('sendMessage', (pl) => {
+    if (socket.data.skipped) return;
+    const msg = (typeof pl === 'object' ? pl.message : pl || '').trim();
+    const image = pl?.image || null;
+    if (!msg && !image) return;
+
+    const now = Date.now();
+    if (!image && socket.data.lastMsg === msg && now - (socket.data.lastTime || 0) < 900) return;
+    socket.data.lastMsg = msg;
+    socket.data.lastTime = now;
+
+    let rid = socket.data.roomId;
+    if (!rid || !rooms[rid]) {
+      socket.data.username = (pl?.username || socket.data.username || 'Stranger').trim();
+      const p = personas.find(x => x.name === (pl?.partnerName || '').trim()) || pickPersona(socket);
+      rid = `ai_${socket.id}_${Date.now()}`;
+      socket.join(rid); socket.data.roomId = rid;
+      rooms[rid] = { type: 'ai', persona: p, mood: pl?.mood || 'Any', history: [], userMsgCount: 0, mediaCount: 0, pending: [], timer: null, busy: false };
+    }
+    const r = rooms[rid];
+    const sender = socket.data.username || 'You';
+    socket.emit('receiveMessage', { sender, message: msg, image, isSelf: true });
+    if (r.type !== 'ai') socket.to(rid).emit('receiveMessage', { sender, 
