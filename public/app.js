@@ -7,6 +7,8 @@ const menuToggle = document.getElementById('menuToggle');
 const homeBrand = document.getElementById('homeBrand');
 const motionPreviewBox = document.getElementById('motionPreviewBox');
 
+const aiAssistTopBtn = document.getElementById('aiAssistTopBtn');
+const aiSuggestBtn = document.getElementById('aiSuggestBtn');
 const girlModeLockBtn = document.getElementById('girlModeLockBtn');
 const chatGirlLockBtn = document.getElementById('chatGirlLockBtn');
 const subModal = document.getElementById('subModal');
@@ -65,7 +67,8 @@ let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
 let faceIndex = 0;
-let session = { active: false, isPrivate: false, partnerName: '', roomCode: '', username: 'Stranger' };
+let lastPartnerMsg = '';
+let session = { active: false, isPrivate: false, isAssistant: false, partnerName: '', roomCode: '', username: 'Stranger' };
 
 function speakReply(text) {
   if (!text || !('speechSynthesis' in window)) return;
@@ -108,9 +111,14 @@ async function applyModeUI(newMode) {
   document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
   document.querySelectorAll('.mini-m-btn').forEach(b => b.classList.toggle('active', b.dataset.mm === mode));
 
-  const btnLabels = { text: 'Start Text Chat →', voice: 'Start Voice Chat →', video: 'Start Video Chat →' };
+  const btnLabels = {
+    text: 'Start Text Chat →',
+    voice: 'Start Voice Chat →',
+    video: 'Start Video Chat →',
+    ai: 'Open AI Assistant →'
+  };
   mainStartBtn.textContent = btnLabels[mode];
-  emptyHeading.textContent = mode === 'voice' ? 'Random Voice Chat' : mode === 'video' ? 'Random Video Chat' : 'Random Text Chat';
+  emptyHeading.textContent = mode === 'ai' ? '✨ BaatHub AI Assistant' : mode === 'voice' ? 'Random Voice Chat' : mode === 'video' ? 'Random Video Chat' : 'Random Text Chat';
 
   voicePanel.classList.toggle('hidden', mode !== 'voice');
   videoPanel.classList.toggle('hidden', mode !== 'video');
@@ -122,13 +130,42 @@ async function applyModeUI(newMode) {
       localVideoEl.srcObject = localStream;
       vcMicEnabled = true;
       vcMicBtn.textContent = '🔊 VC Mic ON';
-    } catch (_) {
-      voiceStatusText.textContent = 'VC audio ready';
-    }
+    } catch (_) {}
   } else {
     stopLocalCam();
   }
 }
+
+document.querySelectorAll('.mode-btn').forEach(btn => btn.addEventListener('click', () => applyModeUI(btn.dataset.mode)));
+document.querySelectorAll('.mini-m-btn').forEach(btn => btn.addEventListener('click', () => {
+  const nextM = btn.dataset.mm;
+  applyModeUI(nextM);
+  if (nextM === 'ai') startAssistantChat();
+}));
+
+function startAssistantChat() {
+  applyModeUI('ai');
+  const username = nickInput.value.trim() || 'User';
+  session = { active: true, isPrivate: false, isAssistant: true, partnerName: 'BaatHub AI', roomCode: '', username };
+  showChatScreen('✨ BaatHub AI Assistant', 'Ask anything in Hindi, Hinglish, or English', false);
+  appendMsg('BaatHub AI', 'Namaste! Main BaatHub AI Assistant hoon ✨ Kuch bhi poochho ya chat ke liye best reply maango!', false);
+  if (!socket.connected) socket.connect();
+  socket.emit('joinAssistant', { username });
+}
+
+aiAssistTopBtn.addEventListener('click', startAssistantChat);
+document.getElementById('navAiAssist').addEventListener('click', startAssistantChat);
+
+aiSuggestBtn.addEventListener('click', () => {
+  if (!socket.connected) socket.connect();
+  socket.emit('suggestReply', { lastMsg: lastPartnerMsg, mood });
+});
+
+socket.on('suggestedReply', (line) => {
+  if (!line) return;
+  msgInput.value = line;
+  msgInput.focus();
+});
 
 vcMicBtn.addEventListener('click', () => {
   vcMicEnabled = !vcMicEnabled;
@@ -137,13 +174,14 @@ vcMicBtn.addEventListener('click', () => {
   appendSys(vcMicEnabled ? 'VC Mic ON — awaaz sunayi degi' : 'VC Mic MUTED');
 });
 
-document.querySelectorAll('.mode-btn').forEach(btn => btn.addEventListener('click', () => applyModeUI(btn.dataset.mode)));
-document.querySelectorAll('.mini-m-btn').forEach(btn => btn.addEventListener('click', () => applyModeUI(btn.dataset.mm)));
-
 function sendChat(text, image = null, audioData = null) {
-  if (!session.active) triggerMatch();
+  if (!session.active) {
+    if (mode === 'ai') startAssistantChat();
+    else triggerMatch();
+  }
   const payload = {
     message: text, image, audioData, mode,
+    isAssistant: session.isAssistant,
     partnerName: session.partnerName, isPrivate: session.isPrivate,
     roomCode: session.roomCode, mood, username: session.username
   };
@@ -162,9 +200,7 @@ micToggleBtn.addEventListener('click', async () => {
         stream.getTracks().forEach(t => t.stop());
         const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
         const reader = new FileReader();
-        reader.onloadend = () => {
-          sendChat('🎙️ Voice note', null, reader.result);
-        };
+        reader.onloadend = () => sendChat('🎙️ Voice note', null, reader.result);
         reader.readAsDataURL(blob);
       };
       mediaRecorder.start();
@@ -268,6 +304,7 @@ function appendSys(txt) {
 
 function appendMsg(sender, text, isSelf, image, audioData) {
   emptyLobby.classList.add('hidden');
+  if (!isSelf && text) lastPartnerMsg = text;
   const row = document.createElement('div');
   row.className = `m-row ${isSelf ? 'me' : 'them'}`;
   const bub = document.createElement('div');
@@ -295,22 +332,27 @@ function appendMsg(sender, text, isSelf, image, audioData) {
 function triggerMatch() {
   const username = nickInput.value.trim() || 'Stranger';
   const activeGender = girlModeUnlocked ? genderFilter : 'any';
-  session = { active: true, isPrivate: false, partnerName: '', roomCode: '', username };
+  session = { active: true, isPrivate: false, isAssistant: false, partnerName: '', roomCode: '', username };
   appendSys(`${mode.toUpperCase()} mode matching...`);
   if (!socket.connected) socket.connect();
   socket.emit('joinRandom', { username, mood, genderFilter: activeGender, mode });
 }
 
 function openRandomLobby() {
+  if (mode === 'ai') { startAssistantChat(); return; }
   showChatScreen(emptyHeading.textContent, '10k+ people live • 9k love — no signup', true);
   showWelcomeNotice();
   applyModeUI(mode);
 }
 
-mainStartBtn.addEventListener('click', () => { openRandomLobby(); triggerMatch(); });
+mainStartBtn.addEventListener('click', () => {
+  if (mode === 'ai') startAssistantChat();
+  else { openRandomLobby(); triggerMatch(); }
+});
 startChatNowBtn.addEventListener('click', triggerMatch);
 
 nextBtn.addEventListener('click', () => {
+  if (session.isAssistant) { startAssistantChat(); return; }
   if (session.isPrivate) { appendSys('Private room mein Next active nahi hai.'); return; }
   showChatScreen(emptyHeading.textContent, 'Matching next person...', false);
   triggerMatch();
@@ -319,7 +361,7 @@ nextBtn.addEventListener('click', () => {
 joinRoomBtn.addEventListener('click', () => {
   const username = nickInput.value.trim() || 'Guest';
   const code = (roomCodeField.value.trim() || 'ROOM' + Math.floor(100 + Math.random() * 900)).toUpperCase();
-  session = { active: true, isPrivate: true, partnerName: `Room: ${code}`, roomCode: code, username };
+  session = { active: true, isPrivate: true, isAssistant: false, partnerName: `Room: ${code}`, roomCode: code, username };
   showChatScreen(`Room: ${code}`, 'Share room code with friends', false);
   applyModeUI(mode);
   appendSys(`Joined room ${code}`);
@@ -334,7 +376,7 @@ document.getElementById('navVoiceChat').addEventListener('click', () => { applyM
 document.getElementById('navVideoChat').addEventListener('click', () => { applyModeUI('video'); openRandomLobby(); });
 document.getElementById('navPrivateRoom').addEventListener('click', () => {
   const code = (roomCodeField.value.trim() || 'DOST123').toUpperCase();
-  session = { active: true, isPrivate: true, partnerName: `Room: ${code}`, roomCode: code, username: nickInput.value.trim() || 'Guest' };
+  session = { active: true, isPrivate: true, isAssistant: false, partnerName: `Room: ${code}`, roomCode: code, username: nickInput.value.trim() || 'Guest' };
   showChatScreen(`Room: ${code}`, 'Private friend room', false);
   applyModeUI(mode);
   if (!socket.connected) socket.connect();
