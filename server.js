@@ -25,10 +25,10 @@ let activeModel = null, discoveredModels = [], lastErr = 'None';
 
 async function tryCall(m, key, sys, contents) {
   try {
-    const ctrl = new AbortController(), t = setTimeout(() => ctrl.abort(), 8500);
+    const ctrl = new AbortController(), t = setTimeout(() => ctrl.abort(), 7000);
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal,
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: sys }] }, contents, generationConfig: { temperature: 0.95, maxOutputTokens: 220 } })
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: sys }] }, contents, generationConfig: { temperature: 0.9, maxOutputTokens: 220 } })
     });
     clearTimeout(t);
     const d = await r.json();
@@ -55,12 +55,35 @@ async function callAI(sys, contents) {
         discoveredModels = (d.models || []).filter(m => (m.supportedGenerationMethods || []).includes('generateContent') && m.name.includes('gemini') && !bad.some(b => m.name.toLowerCase().includes(b))).map(m => m.name.replace('models/', ''));
       } catch (e) { lastErr = e.message; }
     }
-    for (const m of [...new Set(['gemini-2.5-flash-lite','gemini-2.0-flash','gemini-2.5-flash','gemini-3.0-flash','gemini-flash-latest',...discoveredModels])].slice(0, 6)) {
+    for (const m of [...new Set(['gemini-2.5-flash-lite','gemini-2.0-flash','gemini-2.5-flash','gemini-3.0-flash','gemini-flash-latest',...discoveredModels])].slice(0, 5)) {
       const ok = await tryCall(m, k, sys, contents);
       if (ok) { activeModel = m; return ok; }
     }
   }
   return null;
+}
+
+function assistantSmartFallback(userMsg) {
+  const m = (userMsg || '').toLowerCase().trim();
+  if (!m || /\b(hi|hello|hey|namaste|kya haal|kaise ho|kaisa h)\b/i.test(m)) {
+    return 'Hey! Main BaatHub AI Assistant hoon ✨ Aap mujhse chat lines, flirting/icebreaker ideas, study/GK doubts, ya kisi bhi topic par baat kar sakte hain.';
+  }
+  if (/\b(flirt|line|impress|pickup|crush|pyar|love)\b/i.test(m)) {
+    return 'Try yeh line: "Tumhari baatein itni chill hain ki chat karte waqt time ka pata hi nahi chalta 😊"';
+  }
+  if (/\b(icebreaker|start|shuru|baat kaise)\b/i.test(m)) {
+    return 'Try karein: "Hey! Aaj ka sabse best part kya raha tumhare din ka?"';
+  }
+  if (/\b(joke|funny|hasao|bore)\b/i.test(m)) {
+    return 'Teacher: Batayo sabse tez kya chalta hai? Student: Sir, exam mein pen aur ghar aane ke baad mummy ki chappal 😂';
+  }
+  if (/\b(study|padhai|exam|gk|math|formula|shortcut)\b/i.test(m)) {
+    return 'Topic ka naam aur exact question bhejein—main short steps aur quick trick ke saath samjha dunga.';
+  }
+  if (/\b(kya kr|kya kar|who are you|kaun ho)\b/i.test(m)) {
+    return 'Main aapka BaatHub AI Assistant hoon—aapke sawalon ke jawab dene aur chat ko interesting banane ke liye ready hoon ✨';
+  }
+  return `Maine "${userMsg}" padh liya ✨ Is par detail ya short reply chahiye toh aur specific poochhein, main help karunga!`;
 }
 
 app.get('/test-ai', async (req, res) => {
@@ -101,7 +124,7 @@ function humanFallback(room, userMsg) {
   if (m.includes('kahan') || m.includes('kha se') || m.includes('city')) return room.mem.city ? `mai ${room.persona.city} se hu! tum toh ${room.mem.city} se ho na?` : `mai ${room.persona.city} se hu! tum kahan se ho?`;
   if (m.includes('clg') || m.includes('college') || m.includes('padhai') || m.includes('job')) return isGirl ? `mai abhi clg me hu yr, tum kya kr rhe ho?` : `mai abhi clg me hu bhai, tu kya kr rha h?`;
   if (m.includes('voice')) return isGirl ? `haa sun rhi hu yr! tum bhi record krke bhejo 🎙️` : `haa sun rha hu bhai! tu bhi record krke bhej 🎙️`;
-  const opts = isGirl ? [`${room.mem.name ? room.mem.name + ', ' : ''}acha nice yr! waise free time me kya krna pasand h?`,`haha sahi bol rhe ho yr, aur btao kya scene h?`,`yahan ${room.persona.city} me toh mast mausam h, tumhara din kaisa ja rha?`,`ek truth ya dare khelein kya? 🎲`] : [`${room.mem.name ? room.mem.name + ', ' : ''}acha nice bhai! waise free time me kya krna pasand h?`,`haha sahi bol rha h bhai, aur bta kya scene h?`,`yahan ${room.persona.city} me toh mast mausam h, tera din kaisa ja rha?`,`ek truth ya dare khelein kya? 🎲`];
+  const opts = isGirl ? [`${room.mem.name ? room.mem.name + ', ' : ''}acha nice yr! waise free time me kya krna pasand h?`,`haha sahi bol rhe ho yr, aur btao kya scene h?`,`yahan ${room.persona.city} me toh mast mausam h, tumhara din kaisa ja rha?`,`ek truth ya dare khelein kya? 🎲`] : [`${room.mem.name ? room.mem.name + ', ' : ''}acha nice bhai! waise free time me kya krna pasand h?`,`haha sahi bol rhe ho bhai, aur bta kya scene h?`,`yahan ${room.persona.city} me toh mast mausam h, tera din kaisa ja rha?`,`ek truth ya dare khelein kya? 🎲`];
   return opts.find(x => !room.used.has(x.toLowerCase())) || opts[room.count % opts.length];
 }
 
@@ -248,4 +271,29 @@ io.on('connection', (s) => {
       s.data.username = (pl?.username || s.data.username || 'Stranger').trim();
       const p = personas.find(x => x.name === (pl?.partnerName || '').trim()) || personas[0];
       rid = `ai_${s.id}_${Date.now()}`; s.join(rid); s.data.roomId = rid;
-      rooms[rid] = { type: 'ai', persona: p, mood: pl?.mood || 'Any', mem: {}, history: [], used: new Set(), count: 0, media: 0, pending: [], timer:
+      rooms[rid] = { type: 'ai', persona: p, mood: pl?.mood || 'Any', mem: {}, history: [], used: new Set(), count: 0, media: 0, pending: [], timer: null, busy: false };
+    }
+    const r = rooms[rid], sender = s.data.username || 'You';
+    s.emit('receiveMessage', { sender, message: msg, image, audioData, isSelf: true });
+    if (r.type === 'assistant') {
+      const userPrompt = msg || 'Voice/Photo sent';
+      r.history.push({ role: 'user', text: userPrompt });
+      s.emit('partnerTyping', true);
+      const contents = r.history.slice(-16).map(h => ({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.text }] }));
+      const ai = await callAI('You are BaatHub AI Assistant. Reply clearly, naturally, and helpfully in Hinglish or English.', contents);
+      const replyText = ai?.text || assistantSmartFallback(userPrompt);
+      r.history.push({ role: 'ai', text: replyText });
+      s.emit('partnerTyping', false);
+      s.emit('receiveMessage', { sender: 'BaatHub AI', message: replyText, isSelf: false });
+      return;
+    }
+    if (r.type !== 'ai') s.to(rid).emit('receiveMessage', { sender, message: msg, image, audioData, isSelf: false });
+    else { r.pending.push(audioData ? 'User sent a voice note' : (image ? `${msg || ''} [User sent photo]`.trim() : msg)); scheduleAI(s, rid, 900); }
+  });
+
+  s.on('typing', (isT) => { const rid = s.data.roomId; if (rid && rooms[rid] && rooms[rid].type !== 'ai') s.to(rid).emit('partnerTyping', isT); });
+  s.on('leaveChat', () => cleanup(s));
+  s.on('disconnect', () => cleanup(s));
+});
+
+server.listen(process.env.PORT || 3000, () => console.log('BaatHub live'));
