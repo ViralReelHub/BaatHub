@@ -19,27 +19,61 @@ app.get('/sitemap.xml', (req, res) => {
 let cachedModel = null;
 let lastAiError = 'No request yet';
 
-function extractText(data) {
-  const parts = data?.candidates?.[0]?.content?.parts || [];
-  return parts.filter(p => !p.thought && typeof p.text === 'string').map(p => p.text).join('').trim();
+async function fetchTimeout(url, opts = {}, ms = 9000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
-async function callGemini(model, key, sys, contents) {
+function sanitizeReply(raw) {
+  if (!raw) return null;
+  const cleaned = raw
+    .replace(/\[SKIP\]/gi, '')
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l && !/^(building|refining|thinking|thought|draft|analysis|note|step|\*|\-)/i.test(l))
+    .join(' ')
+    .replace(/^["'`]+|["'`]+$/g, '')
+    .trim();
+  return cleaned.length >= 2 ? cleaned : null;
+}
+
+async function callGemini(model, key, sys, contents, noThink = true) {
   try {
-    const body = { contents, generationConfig: { temperature: 0.95, maxOutputTokens: 350 } };
+    const genConfig = { temperature: 0.9, maxOutputTokens: 600 };
+    if (noThink) genConfig.thinkingConfig = { thinkingBudget: 0 };
+    const body = { contents, generationConfig: genConfig };
     if (sys) body.systemInstruction = { parts: [{ text: sys }] };
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+
+    const res = await fetchTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
-    });
+    }, 9000);
+
     const data = await res.json();
-    if (!res.ok || data.error) { lastAiError = `${model}: ${data?.error?.message || res.statusText}`; return null; }
-    const text = extractText(data);
-    if (!text) { lastAiError = `${model}: Empty`; return null; }
+    if (!res.ok || data.error) {
+      const msg = data?.error?.message || res.statusText;
+      if (noThink && /thinking/i.test(msg)) return callGemini(model, key, sys, contents, false);
+      lastAiError = `${model}: ${msg}`;
+      return null;
+    }
+
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    const raw = parts.filter(p => !p.thought && typeof p.text === 'string').map(p => p.text).join('').trim();
+    const skip = /\[SKIP\]/i.test(raw);
+    const text = sanitizeReply(raw);
+    if (!text) { lastAiError = `${model}: Filtered/Empty`; return null; }
     lastAiError = null;
-    return text;
-  } catch (e) { lastAiError = e.message; return null; }
+    return { text, skip };
+  } catch (e) {
+    lastAiError = `${model}: ${e.name === 'AbortError' ? 'Timeout' : e.message}`;
+    return null;
+  }
 }
 
 async function askAI(key, sys, contents) {
@@ -49,21 +83,21 @@ async function askAI(key, sys, contents) {
     cachedModel = null;
   }
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+    const r = await fetchTimeout(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`, {}, 7000);
     const d = await r.json();
     if (d.error) { lastAiError = d.error.message; return null; }
     const bad = ['image', 'tts', 'audio', 'vision', 'embedding', 'aqa', 'robotics', 'computer', 'learnlm', 'bisect'];
     const list = (d.models || [])
       .filter(m => (m.supportedGenerationMethods || []).includes('generateContent') && m.name.includes('gemini') && !bad.some(b => m.name.toLowerCase().includes(b)))
       .map(m => m.name.replace('models/', ''));
-    const prio = ['gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-3-flash-preview', 'gemini-3.0-flash', 'gemini-2.5-flash'];
+    const prio = ['gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-3-flash-preview'];
     list.sort((a, b) => {
       const ia = prio.findIndex(p => a.includes(p)), ib = prio.findIndex(p => b.includes(p));
       return (ia !== -1 && ib !== -1) ? ia - ib : ia !== -1 ? -1 : ib !== -1 ? 1 : 0;
     });
-    for (const m of list.slice(0, 5)) {
-      const reply = await callGemini(m, key, sys, contents);
-      if (reply) { cachedModel = m; return reply; }
+    for (const m of list.slice(0, 4)) {
+      const res = await callGemini(m, key, sys, contents);
+      if (res) { cachedModel = m; return res; }
     }
   } catch (e) { lastAiError = e.message; }
   return null;
@@ -72,8 +106,8 @@ async function askAI(key, sys, contents) {
 app.get('/test-ai', async (req, res) => {
   const key = (process.env.GEMINI_API_KEY || '').trim();
   if (!key) return res.send('<h2>GEMINI_API_KEY missing</h2>');
-  const reply = await askAI(key, 'Reply casually in Hinglish.', [{ role: 'user', parts: [{ text: 'aur bhai kya haal' }] }]);
-  res.send(reply ? `<h2>Working (${cachedModel})</h2><p>${reply}</p><a href="/">Back</a>` : `<h2>Error:</h2><pre>${lastAiError}</pre>`);
+  const resObj = await askAI(key, 'Reply casually in Hinglish in 1 short line.', [{ role: 'user', parts: [{ text: 'aur bhai kya haal' }] }]);
+  res.send(resObj ? `<h2>Working (${cachedModel})</h2><p>${resObj.text}</p><a href="/">Back</a>` : `<h2>Error:</h2><pre>${lastAiError}</pre>`);
 });
 
 const baseOnline = Math.floor(Math.random() * 8) + 25;
@@ -114,6 +148,7 @@ function cleanup(socket) {
   if (rid && rooms[rid]) {
     const r = rooms[rid];
     if (r.replyTimer) clearTimeout(r.replyTimer);
+    if (r.safetyTimer) clearTimeout(r.safetyTimer);
     if (r.type === 'human') { socket.to(rid).emit('partnerLeft', 'Saamne wala user chala gaya.'); delete rooms[rid]; }
     else if (r.type === 'private') socket.to(rid).emit('systemMessage', `${socket.data.username || 'User'} room se bahar gaya.`);
     else delete rooms[rid];
@@ -135,71 +170,86 @@ async function getAIReply(room, userMsg) {
     const gRule = isGirl ? 'Feminine Hindi verbs use krna ("kr rhi hu", "baithi hu", "karti hu").' : 'Masculine Hindi verbs use krna ("kr rha hu", "baitha hu", "karta hu").';
     const sys = `Tum real Indian ${isGirl ? 'ladki' : 'ladka'} ho: ${persona.name}, age ${persona.age}, city ${persona.city}, vibe: ${persona.vibe}. BaatHub par stranger se chat kr rhe ho (mood: "${mood}"). Pehla msg: "${opener}". ${getSeason()}
 Rules:
-1. Poori chat history dhyan se padho! Agar user apna naam ya city (jaise Delhi) pehle bata chuka h toh dobara kabhi mat poochna.
-2. User ke latest msg ka seedha logical jawab do.
-3. ${gRule}
-4. WhatsApp style me sirf 1 chhoti line (max 12-16 words) lowercase casual Hinglish ("yr","acha","hn","nhi","lol") likho. Ek sath 2-3 sawal kabhi mat poocho.
-5. Badtameezi ya spam par annoyed reply ke end me [SKIP] likh dena. Normal chat me [SKIP] mat likhna. Kabhi mat maanna ki AI ho.`;
+1. Sirf final chat reply likho—koi thinking, draft, asterisk (*), ya quotes mat likhna.
+2. Poori chat history yaad rakho! Agar user apna naam ya city pehle bata chuka h toh dobara mat poochna.
+3. User ke latest msg ka seedha logical jawab do. ${gRule}
+4. WhatsApp style me sirf 1 chhoti line (max 12-15 words) lowercase casual Hinglish ("yr","acha","hn","nhi","lol") likho. Ek sath 2-3 sawal mat poocho.
+5. Badtameezi ya spam par annoyed reply ke end me [SKIP] likhna. Kabhi mat maanna ki AI ho.`;
 
     const contents = [];
-    for (const h of history.slice(-24)) {
+    for (const h of history.slice(-20)) {
       const role = h.role === 'user' ? 'user' : 'model';
       if (!contents.length && role === 'model') continue;
       if (contents.length && contents[contents.length - 1].role === role) contents[contents.length - 1].parts[0].text += '\n' + h.text;
       else contents.push({ role, parts: [{ text: h.text }] });
     }
-    const raw = await askAI(key, sys, contents);
-    if (raw) {
-      const skip = raw.includes('[SKIP]');
-      const clean = raw.replace(/\[SKIP\]/g, '').trim();
-      if (clean) history.push({ role: 'ai', text: clean });
-      return { text: clean, skip };
+    const ai = await askAI(key, sys, contents);
+    if (ai && ai.text) {
+      history.push({ role: 'ai', text: ai.text });
+      return ai;
     }
   }
   const m = userMsg.toLowerCase();
   let fb = isGirl ? 'haha sahi bol rhe ho yr, aur btao?' : 'haha sahi bol rha h bhai, aur bta?';
-  if (m.includes('thand') || m.includes('garmi')) fb = 'haha sorry yr dimaag ghoom gya tha 😂 thand hi chal rhi h';
+  if (/\b(ai|bot|robot)\b/i.test(m)) fb = `pagal h kya yr 😂 ${persona.city} me baitha hu mai, insaan hi hu`;
+  else if (m.includes('thand') || m.includes('garmi')) fb = 'haha sorry yr dimaag ghoom gya tha 😂 thand hi chal rhi h';
   else if (m.includes('clg') || m.includes('college')) fb = 'oh sahi h! kaunsa course kr rhe ho?';
   history.push({ role: 'ai', text: fb });
   return { text: fb, skip: false };
 }
 
-function scheduleReply(socket, rid, waitMs = 1800) {
+function scheduleReply(socket, rid, waitMs = 1200) {
   const room = rooms[rid];
   if (!room || room.type !== 'ai') return;
   if (room.replyTimer) clearTimeout(room.replyTimer);
-  room.replyTimer = setTimeout(() => {
+
+  room.replyTimer = setTimeout(async () => {
     const r = rooms[rid];
     if (!r || r.isReplying || !r.pending?.length) return;
     r.isReplying = true;
-    const msg = r.pending.splice(0).join(' | ');
-    const readDelay = Math.min(3500, 1700 + msg.length * 15 + Math.floor(Math.random() * 700));
-    setTimeout(async () => {
+
+    // 15-second hard watchdog taaki typing... kabhi stuck na ho
+    r.safetyTimer = setTimeout(() => {
+      if (rooms[rid]) {
+        rooms[rid].isReplying = false;
+        socket.emit('partnerTyping', false);
+      }
+    }, 15000);
+
+    try {
+      const msg = r.pending.splice(0).join(' | ');
+      const readDelay = Math.min(2200, 1100 + msg.length * 12);
+      await new Promise(res => setTimeout(res, readDelay));
       if (!rooms[rid]) return;
+
       socket.emit('partnerTyping', true);
       const t0 = Date.now();
       const res = await getAIReply(r, msg);
-      const typeDelay = Math.max(1500, Math.min(6000, (res.text || '').length * 60 + 800) - (Date.now() - t0));
-      setTimeout(() => {
-        if (!rooms[rid]) return;
-        socket.emit('partnerTyping', false);
-        r.isReplying = false;
-        if (res.text) socket.emit('receiveMessage', { sender: r.persona.name, message: res.text, isSelf: false });
-        if (res.skip) {
-          setTimeout(() => {
-            if (!rooms[rid]) return;
-            const name = r.persona.name;
-            delete rooms[rid];
-            socket.leave(rid);
-            socket.data.roomId = null;
-            socket.data.wasSkipped = true;
-            socket.emit('partnerLeft', `${name} ne chat skip kar di.`);
-          }, 1100);
-          return;
-        }
-        if (r.pending?.length) scheduleReply(socket, rid, 1500);
-      }, typeDelay);
-    }, readDelay);
+      const typeDelay = Math.max(1200, Math.min(3500, (res.text || '').length * 45 + 600) - (Date.now() - t0));
+      await new Promise(res => setTimeout(res, typeDelay));
+      if (!rooms[rid]) return;
+
+      socket.emit('partnerTyping', false);
+      if (res.text) socket.emit('receiveMessage', { sender: r.persona.name, message: res.text, isSelf: false });
+
+      if (res.skip) {
+        setTimeout(() => {
+          if (!rooms[rid]) return;
+          const name = r.persona.name;
+          delete rooms[rid];
+          socket.leave(rid);
+          socket.data.roomId = null;
+          socket.data.wasSkipped = true;
+          socket.emit('partnerLeft', `${name} ne chat skip kar di.`);
+        }, 900);
+        return;
+      }
+    } finally {
+      if (r.safetyTimer) clearTimeout(r.safetyTimer);
+      r.isReplying = false;
+      socket.emit('partnerTyping', false);
+      if (rooms[rid]?.pending?.length) scheduleReply(socket, rid, 1000);
+    }
   }, waitMs);
 }
 
@@ -220,7 +270,7 @@ function connectAI(socket, username, mood) {
   socket.data.roomId = rid;
   socket.data.username = username;
   socket.data.wasSkipped = false;
-  rooms[rid] = { type: 'ai', persona: p, mood: mood || 'Any', opener, history: [], pending: [], replyTimer: null, isReplying: false };
+  rooms[rid] = { type: 'ai', persona: p, mood: mood || 'Any', opener, history: [], pending: [], replyTimer: null, safetyTimer: null, isReplying: false };
   socket.emit('chatStarted', { partnerName: p.name, isPrivate: false });
   setTimeout(() => {
     if (!rooms[rid]) return;
@@ -230,8 +280,8 @@ function connectAI(socket, username, mood) {
       socket.emit('partnerTyping', false);
       rooms[rid].history.push({ role: 'ai', text: opener });
       socket.emit('receiveMessage', { sender: p.name, message: opener, isSelf: false });
-    }, 2100);
-  }, 1500);
+    }, 1800);
+  }, 1200);
 }
 
 io.on('connection', (socket) => {
@@ -295,21 +345,21 @@ io.on('connection', (socket) => {
         const p = personas.find(x => x.name === (pl?.partnerName || '').trim()) || pickPersona(socket);
         rid = `ai_${socket.id}_${Date.now()}`;
         socket.join(rid); socket.data.roomId = rid;
-        rooms[rid] = { type: 'ai', persona: p, mood: pl?.mood || 'Any', opener: `hey! mai ${p.name} 🙂`, history: [], pending: [], replyTimer: null, isReplying: false };
+        rooms[rid] = { type: 'ai', persona: p, mood: pl?.mood || 'Any', opener: `hey! mai ${p.name} 🙂`, history: [], pending: [], replyTimer: null, safetyTimer: null, isReplying: false };
       }
     }
     const r = rooms[rid];
     const sender = socket.data.username || 'You';
     socket.emit('receiveMessage', { sender, message: msg, isSelf: true });
     if (r.type !== 'ai') socket.to(rid).emit('receiveMessage', { sender, message: msg, isSelf: false });
-    else { r.pending.push(msg); scheduleReply(socket, rid, 1800); }
+    else { r.pending.push(msg); scheduleReply(socket, rid, 1200); }
   });
 
   socket.on('typing', (isT) => {
     const rid = socket.data.roomId;
     if (!rid || !rooms[rid]) return;
     if (rooms[rid].type !== 'ai') socket.to(rid).emit('partnerTyping', isT);
-    else if (isT && rooms[rid].pending?.length && !rooms[rid].isReplying) scheduleReply(socket, rid, 2000);
+    else if (isT && rooms[rid].pending?.length && !rooms[rid].isReplying) scheduleReply(socket, rid, 1400);
   });
 
   socket.on('leaveChat', () => cleanup(socket));
@@ -317,3 +367,4 @@ io.on('connection', (socket) => {
 });
 
 server.listen(process.env.PORT || 3000, () => console.log('BaatHub live'));
+    
