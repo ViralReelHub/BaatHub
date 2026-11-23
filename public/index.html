@@ -3,24 +3,27 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BaatHub — Chat with Strangers Anonymously</title>
+  <title>BaatHub — Live Anonymous Chat & 10k+ Community</title>
   <link rel="stylesheet" href="style.css" />
   <meta name="google-site-verification" content="b97yk04eTaFznJPeCzro8yAtCjduRo8UcO7ybPjTSjM" />
 </head>
 <body>
   <header class="topbar">
     <a href="#" id="homeBrand" class="brand">
-      <span class="brand-badge">talk</span>
-      <span class="brand-name">baathub</span>
+      <span class="brand-gem">BH</span>
+      <span class="brand-name">BaatHub</span>
     </a>
-    <button id="menuToggle" class="menu-btn" aria-label="Menu">☰</button>
+    <div class="top-actions">
+      <button type="button" id="girlModeLockBtn" class="girl-lock-btn">🔒 Girl Mode</button>
+      <button type="button" id="menuToggle" class="menu-btn" aria-label="Menu">☰</button>
+    </div>
   </header>
 
   <nav id="navDrawer" class="drawer hidden">
-    <button id="navTextChat">💬 Text Chat</button>
+    <button id="navTextChat">💬 Live Chat</button>
     <button id="navPrivateRoom">🔒 Private Room</button>
-    <button id="navVip">👑 VIP & Filters</button>
-    <a href="#guides">📖 Safety Guides</a>
+    <button id="navUnlockGirl">🔒 Unlock Girl Mode</button>
+    <a href="#guides">📖 Guides</a>
     <a href="/privacy">Privacy Policy</a>
     <a href="/terms">Terms of Service</a>
   </nav>
@@ -35,26 +38,24 @@
 
       <h1 class="hero-title">Chat with <span>Strangers</span></h1>
 
-      <div class="center-col">
-        <div class="live-pill">
-          <span class="live-dot"></span>
-          <span id="landingOnline">540+ people chatting right now</span>
-        </div>
-
-        <div class="mode-switch" id="modeSwitch">
-          <button type="button" class="mode-btn active" data-mode="text">💬 Text</button>
-          <button type="button" class="mode-btn" data-mode="voice">🎤 Voice</button>
-          <button type="button" class="mode-btn" data-mode="video">📹 Video</button>
-        </div>
-
-        <button id="mainStartBtn" class="cta-teal">Start Text Chat →</button>
+      <div class="stats-row">
+        <div class="stat-pill"><span class="live-dot"></span><span id="landingLiveText">10k+ people live</span></div>
+        <div class="stat-pill">❤️ <span id="landingLoveText">9k love</span></div>
       </div>
+
+      <div class="mode-switch" id="modeSwitch">
+        <button type="button" class="mode-btn active" data-mode="text">💬 Text</button>
+        <button type="button" class="mode-btn" data-mode="voice">🎤 Voice</button>
+        <button type="button" class="mode-btn" data-mode="video">📹 Video</button>
+      </div>
+
+      <button id="mainStartBtn" class="cta-main">Start Live Chat →</button>
 
       <div class="extra-opts">
         <div class="field-box">
           <label for="nickInput">Nickname & Mood</label>
           <input type="text" id="nickInput" placeholder="Apna naam (optional)" maxlength="18" />
-          <div class="chips" id="moodChips" style="margin-top:8px;">
+          <div class="chips" id="moodChips">
             <button type="button" class="chip active" data-mood="Any">Any</button>
             <button type="button" class="chip" data-mood="🎲 Truth / Dare">Truth / Dare</button>
             <button type="button" class="chip" data-mood="😂 Timepass">Timepass</button>
@@ -65,89 +66,73 @@
         <div class="field-box">
           <label for="roomCodeField">Friend Private Room</label>
           <input type="text" id="roomCodeField" placeholder="Code (e.g. DOST99)" maxlength="14" />
-          <button type="button" id="joinRoomBtn" class="chip active" style="margin-top:8px; padding:7px 14px;">Join Private Room</button>
+          <button type="button" id="joinRoomBtn" class="chip active" style="padding:7px 14px;">Join Private Room</button>
         </div>
       </div>
     </section>
 
     <section class="sec-card">
-      <h2>No signup, instant match</h2>
-      <p>Open browser, pick a mode, and start chatting in seconds. Your identity stays private—no account or app download required to jump into a text conversation.</p>
+      <h2>10k+ people live, zero signup</h2>
+      <p>Jump straight into live conversations with 10k+ people live and 9k love across our community—no account required.</p>
     </section>
 
     <section class="sec-card">
-      <h2>baathub vs Chatroulette / Monkey / OmeTV</h2>
-      <p>Here’s how BaatHub compares for quick browser-based stranger chats.</p>
+      <h2>BaatHub vs Other Chat Apps</h2>
+      <p>Fast browser chat with moods, private rooms, and optional Girl Mode pass.</p>
       <table class="comp-table">
-        <thead>
-          <tr><th>Feature</th><th>baathub</th><th>Monkey</th><th>OmeTV</th></tr>
-        </thead>
+        <thead><tr><th>Feature</th><th>BaatHub</th><th>Monkey</th><th>OmeTV</th></tr></thead>
         <tbody>
           <tr><td>Browser chat</td><td class="yes">Yes</td><td class="no">App</td><td class="yes">Yes</td></tr>
           <tr><td>No signup</td><td class="yes">Yes</td><td class="no">Required</td><td class="yes">Yes</td></tr>
-          <tr><td>AI & mod filter</td><td class="yes">Yes</td><td class="mid">Basic</td><td class="mid">Basic</td></tr>
+          <tr><td>Girl Mode pass</td><td class="yes">VIP</td><td class="mid">Paid</td><td class="mid">Paid</td></tr>
           <tr><td>Private rooms</td><td class="yes">Yes</td><td class="no">No</td><td class="no">No</td></tr>
         </tbody>
       </table>
     </section>
 
     <section id="guides" class="sec-card">
-      <h2>Why BaatHub is Built for Fast Chat</h2>
-      <p>Practical tips, safety habits, and quick guides for anonymous conversations.</p>
+      <h2>Quick Community Guides</h2>
       <div class="guide-item">
         <span>📖</span>
-        <h3>How to Talk to Strangers Safely (2026 Guide)</h3>
-        <p>Keep personal details private, use Next anytime, and report abusive behavior immediately.</p>
-        <a href="#faq" class="guide-link">Read guide →</a>
+        <h3>How Girl Mode & Random Match Work</h3>
+        <p>Default random mode connects anyone available; subscribe to unlock dedicated Girl Mode.</p>
+        <a href="#faq" class="guide-link">Read more →</a>
       </div>
       <div class="guide-item">
         <span>📖</span>
-        <h3>Text, Moods & Private Rooms Explained</h3>
-        <p>Switch between random strangers, Truth/Dare icebreakers, or share a code with friends.</p>
-        <a href="#faq" class="guide-link">Read guide →</a>
+        <h3>Safe Anonymous Chatting Tips</h3>
+        <p>Keep personal info private, tap Next anytime, and keep chats respectful.</p>
+        <a href="#faq" class="guide-link">Read more →</a>
       </div>
     </section>
 
     <section id="faq" class="sec-card">
       <h2>Frequently Asked Questions</h2>
-      <div class="faq-list">
-        <details><summary>Is BaatHub free to use?</summary><p>Yes, random text chat and private rooms are free right in your browser.</p></details>
-        <details><summary>Do I need to create an account?</summary><p>No signup is required. Just type a message or hit Start chatting.</p></details>
-        <details><summary>Does it work on mobile browsers?</summary><p>Yes, it is built mobile-first for Android and iPhone browsers.</p></details>
-      </div>
+      <details><summary>Is random chat free?</summary><p>Yes, random chat and private rooms are free in your browser.</p></details>
+      <details><summary>Why is Girl Mode locked?</summary><p>Girl Mode is a subscription feature; without it, random matching connects anyone available.</p></details>
     </section>
 
     <div class="footer-grid">
-      <div>
-        <h4>MODES</h4>
-        <a href="#" id="fRandom">Random text chat</a>
-        <a href="#" id="fRoom">Private room</a>
-        <a href="#guides">Safety guides</a>
-      </div>
-      <div>
-        <h4>BAATHUB</h4>
-        <a href="/privacy">Privacy Policy</a>
-        <a href="/terms">Terms of Service</a>
-        <a href="#faq">FAQ</a>
-      </div>
+      <div><h4>MODES</h4><a href="#" id="fRandom">Random chat</a><a href="#" id="fRoom">Private room</a><a href="#guides">Guides</a></div>
+      <div><h4>BAATHUB</h4><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><a href="#faq">FAQ</a></div>
     </div>
-    <div class="copy-box">&copy; 2026 baathub. All rights reserved.</div>
+    <div class="copy-box">&copy; 2026 BaatHub. All rights reserved.</div>
   </main>
 
   <section id="chatView" class="chat-screen hidden">
     <div class="chat-subbar">
-      <button id="filterPill" class="filter-pill">🔒 Mood / Filter</button>
-      <span id="chatStatusLabel" style="font-size:0.8rem; color:#94a3b8; font-weight:700;">Ready</span>
-      <button id="exitChatBtn" class="filter-pill">Exit</button>
+      <button type="button" id="chatGirlLockBtn" class="girl-lock-btn">🔒 Girl Mode</button>
+      <span id="chatStatusLabel" style="font-size:0.78rem; color:#94a3b8; font-weight:700;">Ready</span>
+      <button type="button" id="exitChatBtn" class="filter-pill">Exit</button>
     </div>
 
     <div id="chatStream" class="chat-body">
       <div id="emptyLobby" class="empty-state">
-        <div class="online-tag" id="roomOnlineTag">540+ online</div>
+        <div class="online-tag" id="roomOnlineTag">10k+ people live • 9k love</div>
         <div class="duo-icons">👤 • 👤</div>
-        <h2 id="emptyHeading">Random Text Chat</h2>
-        <p id="emptySub">Chat anonymously with strangers — no signup</p>
-        <button id="startChatNowBtn" class="start-chat-btn">▶ Start chatting</button>
+        <h2 id="emptyHeading">Random Chat</h2>
+        <p id="emptySub">10k+ people live • 9k love — no signup</p>
+        <button type="button" id="startChatNowBtn" class="start-chat-btn">▶ Start chatting</button>
       </div>
     </div>
 
@@ -155,9 +140,19 @@
       <input type="file" id="picFile" accept="image/*" class="hidden" />
       <button type="button" id="picPickBtn" class="icon-act" title="Photo">📷</button>
       <input type="text" id="msgInput" placeholder="Message" autocomplete="off" />
-      <button type="button" id="nextBtn" class="next-btn">▷| Next</button>
+      <button type="submit" id="sendMsgBtn" class="send-btn">Send</button>
+      <button type="button" id="nextBtn" class="next-btn">Next</button>
     </form>
   </section>
+
+  <div id="subModal" class="modal hidden">
+    <div class="modal-box">
+      <h2>🔒 Girl Mode Subscription</h2>
+      <p>Girl Mode unlock karne ke liye subscription zaroori hai. Bina subscription ke random mein koi bhi aa sakta hai.</p>
+      <button type="button" id="activateSubBtn" class="cta-main">Subscribe & Unlock Girl Mode</button>
+      <button type="button" id="closeSubBtn" class="filter-pill">Continue Random (Anyone)</button>
+    </div>
+  </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="app.js"></script>
