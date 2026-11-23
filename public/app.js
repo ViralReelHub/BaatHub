@@ -1,5 +1,6 @@
 const socket = io();
 
+// Elements
 const lobbySection = document.getElementById('lobbySection');
 const chatSection = document.getElementById('chatSection');
 const usernameInput = document.getElementById('usernameInput');
@@ -12,144 +13,199 @@ const typingStatus = document.getElementById('typingStatus');
 const messagesContainer = document.getElementById('messagesContainer');
 const messageForm = document.getElementById('messageForm');
 const messageInput = document.getElementById('messageInput');
+const diceBtn = document.getElementById('diceBtn');
 
-const nextStrangerBtn = document.getElementById('nextStrangerBtn');
 const copyRoomBtn = document.getElementById('copyRoomBtn');
+const nextStrangerBtn = document.getElementById('nextStrangerBtn');
 const leaveChatBtn = document.getElementById('leaveChatBtn');
+const onlineCountText = document.getElementById('onlineCountText');
 
-// VIP Modal elements
+// VIP Modal Elements
+const vipBtn = document.getElementById('vipBtn');
 const vipModal = document.getElementById('vipModal');
-document.getElementById('vipBtn').onclick = () => vipModal.classList.remove('hidden');
-document.getElementById('closeVipBtn').onclick = () => vipModal.classList.add('hidden');
-document.getElementById('payVipBtn').onclick = () => {
-  alert('Yahan aap apna Razorpay Payment Link jodein!');
-};
+const closeVipBtn = document.getElementById('closeVipBtn');
+const payVipBtn = document.getElementById('payVipBtn');
 
+let selectedMood = 'Any';
 let currentRoomCode = '';
 let typingTimeout;
 
-// Random Stranger Chat shuru karein
-randomChatBtn.addEventListener('click', () => {
-  openChatScreen();
-  socket.emit('find_stranger', usernameInput.value);
-});
+// WhatsApp-style Pop Sound
+function playPopSound() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(620, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(920, ctx.currentTime + 0.08);
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.09);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.09);
+  } catch (e) {}
+}
 
-// Private Friend Room join karein
-privateChatBtn.addEventListener('click', () => {
-  const code = roomCodeInput.value.trim();
-  if (!code) {
-    alert('Pehle koi Room Code likhein (jaise: DOST123)');
-    return;
-  }
-  openChatScreen();
-  socket.emit('join_private', {
-    username: usernameInput.value,
-    roomCode: code
+// Mood Chips Selection
+document.querySelectorAll('.mood-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.mood-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    selectedMood = chip.getAttribute('data-mood');
   });
 });
 
-// Next Stranger dhoondhein
-nextStrangerBtn.addEventListener('click', () => {
-  messagesContainer.innerHTML = '';
-  typingStatus.textContent = '';
-  socket.emit('find_stranger', usernameInput.value);
+// Live Online Counter
+socket.on('onlineCount', (count) => {
+  if (onlineCountText) {
+    onlineCountText.textContent = `${count} Online`;
+  }
 });
 
-// Room Code copy karein taaki dost ko WhatsApp par bhej sakein
+// Helper: Add Message to Screen
+function addMessage(sender, text, isSelf) {
+  const div = document.createElement('div');
+  div.className = `msg ${isSelf ? 'self' : 'other'}`;
+  div.innerHTML = `<small>${sender}</small><p>${escapeHtml(text)}</p>`;
+  messagesContainer.appendChild(div);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+function addSystemMessage(text) {
+  const div = document.createElement('div');
+  div.className = 'system-msg';
+  div.textContent = text;
+  messagesContainer.appendChild(div);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+function escapeHtml(str) {
+  const p = document.createElement('p');
+  p.textContent = str;
+  return p.innerHTML;
+}
+
+function openChatScreen(titleText, isPrivate) {
+  lobbySection.classList.add('hidden');
+  chatSection.classList.remove('hidden');
+  chatTitle.textContent = titleText;
+  typingStatus.textContent = '';
+  messagesContainer.innerHTML = '';
+
+  if (isPrivate) {
+    copyRoomBtn.classList.remove('hidden');
+    nextStrangerBtn.classList.add('hidden');
+  } else {
+    copyRoomBtn.classList.add('hidden');
+    nextStrangerBtn.classList.remove('hidden');
+  }
+}
+
+// Start Random Chat
+function startRandomSearch() {
+  const username = usernameInput.value.trim() || 'Stranger';
+  openChatScreen('Naya partner dhoondh rahe hain...', false);
+  addSystemMessage('Kisi mast insaan se connect kiya ja raha hai...');
+  socket.emit('joinRandom', { username, mood: selectedMood });
+}
+
+randomChatBtn.addEventListener('click', startRandomSearch);
+
+nextStrangerBtn.addEventListener('click', () => {
+  startRandomSearch();
+});
+
+// Start Private Room
+privateChatBtn.addEventListener('click', () => {
+  const username = usernameInput.value.trim() || 'Guest';
+  const code = roomCodeInput.value.trim().toUpperCase() || 'DOST' + Math.floor(100 + Math.random() * 900);
+  currentRoomCode = code;
+  openChatScreen(`Room: ${code}`, true);
+  addSystemMessage(`Room code "${code}" doston ko share karein!`);
+  socket.emit('joinPrivate', { username, roomCode: code });
+});
+
 copyRoomBtn.addEventListener('click', () => {
   navigator.clipboard.writeText(currentRoomCode);
-  alert(`Room Code "${currentRoomCode}" copy ho gaya! Apne dost ko bhejein.`);
+  copyRoomBtn.textContent = 'Copied!';
+  setTimeout(() => (copyRoomBtn.textContent = 'Copy Code'), 1500);
 });
 
-// Chat chhodkar lobby mein wapas jayein
 leaveChatBtn.addEventListener('click', () => {
-  socket.emit('leave_chat');
+  socket.emit('leaveChat');
   chatSection.classList.add('hidden');
   lobbySection.classList.remove('hidden');
-  messagesContainer.innerHTML = '';
 });
 
-// Message bhejna
+// Truth / Dare Icebreaker Dice Button
+const icebreakers = [
+  '🎲 Truth: Apni phone gallery ki sabse aakhri photo kiski hai? Sach batana!',
+  '🎲 Truth: Aaj tak ka sabse bada jhooth jo tumne ghar walon se bola ho?',
+  '🎲 Dare: Apne naam ka ulta likh kar bhejo bina backspace dabaye!',
+  '🎲 Truth: Kis cheez se sabse zyada darr lagta hai?',
+  '🎲 Truth: Agar ₹1 Crore abhi mil jayein toh sabse pehla kaam kya karoge?',
+  '🎲 Truth: Apne crush ka pehla letter batao 😉',
+  '🎲 Dare: Abhi apni battery percentage aur last played song batao!'
+];
+
+diceBtn.addEventListener('click', () => {
+  const randomPrompt = icebreakers[Math.floor(Math.random() * icebreakers.length)];
+  socket.emit('sendMessage', { message: randomPrompt });
+});
+
+// Send Message
 messageForm.addEventListener('submit', (e) => {
   e.preventDefault();
-  const text = messageInput.value.trim();
-  if (!text) return;
-  socket.emit('send_message', text);
+  const msg = messageInput.value.trim();
+  if (!msg) return;
+  socket.emit('sendMessage', { message: msg });
   socket.emit('typing', false);
   messageInput.value = '';
 });
 
-// Typing indicator bhejna
 messageInput.addEventListener('input', () => {
   socket.emit('typing', true);
   clearTimeout(typingTimeout);
   typingTimeout = setTimeout(() => socket.emit('typing', false), 1000);
 });
 
-// Server Events
-socket.on('waiting_stranger', () => {
-  chatTitle.textContent = 'Kisi online vyakti ko dhoondha ja raha hai...';
-  nextStrangerBtn.classList.add('hidden');
-  copyRoomBtn.classList.add('hidden');
-  addSystemMessage('Intezar karein, jaise hi koi aur online aayega aap connect ho jayenge.');
-});
-
-socket.on('chat_started', (data) => {
+// Socket Listeners
+socket.on('chatStarted', ({ partnerName, isPrivate }) => {
   messagesContainer.innerHTML = '';
-  if (data.mode === 'stranger') {
-    chatTitle.textContent = `Connected: ${data.partnerName}`;
-    nextStrangerBtn.classList.remove('hidden');
-    copyRoomBtn.classList.add('hidden');
-    addSystemMessage(`Aap ${data.partnerName} se jud gaye hain. Say Hi!`);
-  } else {
-    currentRoomCode = data.roomCode;
-    chatTitle.textContent = `Private Room: ${data.roomCode}`;
-    nextStrangerBtn.classList.add('hidden');
-    copyRoomBtn.classList.remove('hidden');
-    addSystemMessage(`Room "${data.roomCode}" ready hai. Code share karke doston ko bulayein.`);
+  chatTitle.textContent = partnerName;
+  playPopSound();
+  if (!isPrivate) {
+    addSystemMessage(`Aap ${partnerName} se jud gaye hain! Say Hi 👋`);
   }
 });
 
-socket.on('receive_message', (msg) => {
-  const isMine = msg.senderId === socket.id;
-  const div = document.createElement('div');
-  div.className = `msg ${isMine ? 'mine' : 'theirs'}`;
-
-  const meta = document.createElement('div');
-  meta.className = 'meta';
-  meta.textContent = `${isMine ? 'Aap' : msg.senderName} • ${msg.time}`;
-
-  const body = document.createElement('div');
-  body.textContent = msg.text; // Safe text rendering (XSS se bachav)
-
-  div.appendChild(meta);
-  div.appendChild(body);
-  messagesContainer.appendChild(div);
-  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+socket.on('receiveMessage', ({ sender, message, isSelf }) => {
+  addMessage(sender, message, isSelf);
+  if (!isSelf) {
+    playPopSound();
+  }
 });
 
-socket.on('partner_typing', ({ username, isTyping }) => {
-  typingStatus.textContent = isTyping ? `${username} likh raha hai...` : '';
+socket.on('systemMessage', (msg) => {
+  addSystemMessage(msg);
 });
 
-socket.on('system_message', (text) => {
-  addSystemMessage(text);
+socket.on('partnerTyping', (isTyping) => {
+  typingStatus.textContent = isTyping ? 'typing...' : '';
 });
 
-socket.on('partner_left', (text) => {
+socket.on('partnerLeft', (msg) => {
   typingStatus.textContent = '';
-  addSystemMessage(text);
+  addSystemMessage(msg + ' Naye partner ke liye "Next" dabayein.');
 });
 
-function openChatScreen() {
-  lobbySection.classList.add('hidden');
-  chatSection.classList.remove('hidden');
-}
-
-function addSystemMessage(text) {
-  const div = document.createElement('div');
-  div.className = 'sys-msg';
-  div.textContent = text;
-  messagesContainer.appendChild(div);
-  messagesContainer.scrollTop = messagesContainer.scrollHeight;
-}
+// VIP Modal Events
+vipBtn.addEventListener('click', () => vipModal.classList.remove('hidden'));
+closeVipBtn.addEventListener('click', () => vipModal.classList.add('hidden'));
+payVipBtn.addEventListener('click', () => {
+  alert('Razorpay payment link banakar yahan lagayein!');
+});
