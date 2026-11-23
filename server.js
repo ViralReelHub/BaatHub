@@ -37,14 +37,14 @@ function broadcastOnlineCount() {
 }
 setInterval(broadcastOnlineCount, 10000);
 
-// AI Personas (Bilkul Real Indian Users Jaise)
+// AI Personas (Real Indian Users Jaise)
 const aiPersonas = [
-  { name: 'Sneha', gender: 'girl', age: 20, city: 'Delhi', vibe: 'thodi sarcastic aur friendly' },
-  { name: 'Aarav', gender: 'boy', age: 21, city: 'Mumbai', vibe: 'chill aur funny' },
-  { name: 'Priya', gender: 'girl', age: 19, city: 'Jaipur', vibe: 'sweet aur baatuni' },
-  { name: 'Rohan', gender: 'boy', age: 22, city: 'Pune', vibe: 'late-night thinker aur friendly' },
-  { name: 'Ananya', gender: 'girl', age: 20, city: 'Lucknow', vibe: 'energetic aur curious' },
-  { name: 'Kabir', gender: 'boy', age: 21, city: 'Indore', vibe: 'humorous aur casual' }
+  { name: 'Sneha', gender: 'girl', age: 20, city: 'Delhi', hobby: 'reels, street food aur late night music', vibe: 'thodi sarcastic, witty aur friendly' },
+  { name: 'Aarav', gender: 'boy', age: 21, city: 'Mumbai', hobby: 'gaming, cricket aur standup comedy', vibe: 'chill, funny aur bindass' },
+  { name: 'Priya', gender: 'girl', age: 19, city: 'Jaipur', hobby: 'web series, coffee aur travelling', vibe: 'sweet, expressive aur baatuni' },
+  { name: 'Rohan', gender: 'boy', age: 22, city: 'Pune', hobby: 'coding, gym aur movies', vibe: 'friendly, relatable aur curious' },
+  { name: 'Ananya', gender: 'girl', age: 20, city: 'Lucknow', hobby: 'shayari, songs aur gossip', vibe: 'energetic aur playful' },
+  { name: 'Kabir', gender: 'boy', age: 21, city: 'Indore', hobby: 'food, bikes aur memes', vibe: 'humorous aur casual' }
 ];
 
 let waitingQueue = [];
@@ -73,90 +73,80 @@ function cleanupUser(socket) {
   }
 }
 
-// Smart Hinglish AI Reply Generator
+// Real Gemini AI Conversation Engine
 async function getHumanLikeAIReply(room, userMsg) {
-  const { persona, mood, history } = room;
+  const { persona, mood, history, opener } = room;
   history.push({ role: 'user', text: userMsg });
 
-  if (process.env.GEMINI_API_KEY) {
+  const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+  if (apiKey) {
     try {
-      const systemPrompt = `Tum ek real Indian ${persona.gender === 'girl' ? 'ladki' : 'ladka'} ho jiska naam ${persona.name} hai (age ${persona.age}, city ${persona.city}, nature: ${persona.vibe}). Tum BaatHub par ek stranger se chat kar rahe ho jiska mood "${mood}" hai. Rules: 1) Sirf natural casual Hinglish (Roman Hindi + English) mein chhote WhatsApp-style messages (1-2 lines) likho. 2) Kabhi bhi mat batana ki tum AI, bot ya assistant ho. Agar koi puche toh has kar taal do ("pagal ho kya, insaan hi hoon 😂"). 3) Zyada formal mat bano, chhota sawal puch kar baat aage badhao.`;
+      const systemPrompt = `Tum ek real Indian ${persona.gender === 'girl' ? 'ladki' : 'ladka'} ho jiska naam ${persona.name} hai (age ${persona.age}, city ${persona.city}, interests: ${persona.hobby}, personality: ${persona.vibe}). Tum BaatHub website par ek stranger se live chat kar rahe ho jiska mood "${mood}" hai. Tumne chat ki shuruat is message se ki thi: "${opener}".
 
-      const contents = history.slice(-8).map(m => ({
-        role: m.role === 'user' ? 'user' : 'model',
-        parts: [{ text: m.text }]
-      }));
+Strict Rules:
+1. Bilkul asli Indian teenager/college student ki tarah natural Hinglish (Roman Hindi + English) mein chat karo. Har message chhota (1 se 2 lines) WhatsApp chat jaisa rakho.
+2. User jo likhe uska exact aur context-aware jawab do. Ek hi sawal ya ek hi pattern kabhi repeat mat karo.
+3. Kabhi bhi mat maanna ki tum AI, bot ya program ho. Agar koi puche "tum AI ho kya?" toh has kar casual jawab do jaise "pagal ho kya, ${persona.city} se hoon main 😂" ya "itni jaldi shak kar liya? insaan hi hoon bhai".
+4. Apni personality dikhao—kabhi joke maaro, kabhi apni life ka chhota kissa batao, aur natural tareeke se baat aage badhao.`;
+
+      const recent = history.slice(-12);
+      const contents = [];
+      for (const item of recent) {
+        const role = item.role === 'user' ? 'user' : 'model';
+        if (contents.length === 0 && role === 'model') continue;
+        if (contents.length > 0 && contents[contents.length - 1].role === role) {
+          contents[contents.length - 1].parts[0].text += '\n' + item.text;
+        } else {
+          contents.push({ role, parts: [{ text: item.text }] });
+        }
+      }
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: systemPrompt }] },
             contents,
-            generationConfig: { temperature: 0.9, maxOutputTokens: 100 }
+            generationConfig: {
+              temperature: 1.0,
+              topP: 0.95,
+              maxOutputTokens: 250,
+              thinkingConfig: { thinkingBudget: 0 }
+            }
           })
         }
       );
 
       const data = await response.json();
+      if (data.error) {
+        console.error('Gemini API Error:', data.error.message);
+      }
       const aiText = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
       if (aiText) {
         history.push({ role: 'ai', text: aiText });
         return aiText;
       }
-    } catch (err) {}
+    } catch (err) {
+      console.error('AI Fetch Error:', err.message);
+    }
   }
 
-  const msg = userMsg.toLowerCase();
-  const turn = history.filter(h => h.role === 'ai').length;
-  let reply = '';
-
-  if (msg.includes('ai ') || msg === 'ai' || msg.includes('bot') || msg.includes('robot') || msg.includes('fake')) {
-    const denials = [
-      `haha kya bol rahe ho yaar, main ${persona.city} se hoon, bot kahan se lag raha hoon 😂`,
-      'arey nahi bhai, insaan hi hoon! tumhe aisa kyun laga?',
-      `lol itni jaldi judge kar liya? main ${persona.name} hoon yaar, tum batao apna naam`
-    ];
-    reply = denials[turn % denials.length];
-  } else if (msg.includes('naam') || msg.includes('name') || msg.includes('kaun ho')) {
-    reply = `mera naam ${persona.name} hai, ${persona.city} se hoon 😊 tumhara naam kya hai aur kahan se ho?`;
-  } else if (msg.includes('kahan se') || msg.includes('where') || msg.includes('city') || msg.includes('rehte')) {
-    reply = `main ${persona.city} se hoon! tum kahan se belong karte ho?`;
-  } else if (msg.includes('boy') || msg.includes('girl') || msg.includes('ladka') || msg.includes('ladki') || msg.includes('m or f')) {
-    reply = persona.gender === 'girl'
-      ? `main ladki hoon (${persona.name}), ${persona.city} se 🙂 waise tum kya karte ho—study ya job?`
-      : `main ladka hoon (${persona.name}), ${persona.city} se bhai! tum kya karte ho abhi?`;
-  } else if (msg.includes('age') || msg.includes('umar') || msg.includes('kitne saal')) {
-    reply = `main ${persona.age} ka hoon abhi. tumhari age kya hai?`;
-  } else if (msg.includes('🎲') || msg.includes('truth') || msg.includes('dare')) {
-    reply = `arey wah dice ghuma diya 😂 pehle tum sach-sach jawab do, phir meri baari!`;
-  } else if (msg.includes('bore') || msg.includes('sad') || msg.includes('akela') || msg.includes('stress') || msg.includes('exam')) {
-    reply = `samajh sakta hoon yaar, kabhi-kabhi bas kisi se mann halka karne ka dil karta hai. batao kya chal raha hai dimaag mein?`;
-  } else if (msg.includes('insta') || msg.includes('snap') || msg.includes('number') || msg.includes('whatsapp')) {
-    reply = `haha abhi toh mile hain yaar, thodi der yahin baat karte hain na pehle 😄`;
-  } else if (turn === 0 && (msg === 'hi' || msg === 'hii' || msg === 'hello' || msg === 'hey' || msg === 'hlw')) {
-    reply = `heyy! kaise ho? main ${persona.name}, ${persona.city} se 🙂`;
-  } else {
-    const naturalFollowUps = [
-      `sahi hai yaar! waise aaj poora din kaisa gaya tumhara?`,
-      `achha ek baat batao, abhi study kar rahe ho ya job?`,
-      `haha bilkul sahi kaha! waise tumhe kis type ki movies ya web series pasand hain?`,
-      `interesting! aur batao, free time mein sabse zyada kya karna pasand hai?`,
-      `sach mein? mujhe bhi kuch aisa hi lagta hai. kahan se ho waise tum?`,
-      `arey wah! agar abhi ek wish maangne ko mile toh kya maangoge?`
-    ];
-    reply = naturalFollowUps[turn % naturalFollowUps.length];
-  }
-
-  history.push({ role: 'ai', text: reply });
-  return reply;
+  const fallback = `arey ${persona.city} mein network thoda slow chal raha hai abhi 😂 waise tum batao kya chal raha hai?`;
+  history.push({ role: 'ai', text: fallback });
+  return fallback;
 }
 
 function connectWithAI(socket, username, mood) {
   const persona = aiPersonas[Math.floor(Math.random() * aiPersonas.length)];
   const roomId = `ai_${socket.id}_${Date.now()}`;
+
+  let opener = `hey! kaise ho? main ${persona.name} 🙂`;
+  if (mood && mood.includes('Timepass')) opener = `heyy! bada bore ho raha tha yaar, accha hua tum mil gaye 😂 kahan se ho?`;
+  else if (mood && mood.includes('Dil')) opener = `hey... sab theek hai na? agar kuch share karna ho toh bina jhijhak bata sakte ho 🙂`;
+  else if (mood && mood.includes('Study')) opener = `hey! padhai aur exams ne dimaag kharab kar rakha hai kya? 😂 kis cheez ki taiyari kar rahe ho?`;
+  else if (mood && mood.includes('Movies')) opener = `heyy! koi mast web series ya game suggest karo yaar, bore ho raha hoon 🎬`;
 
   socket.join(roomId);
   socket.data.roomId = roomId;
@@ -166,6 +156,7 @@ function connectWithAI(socket, username, mood) {
     type: 'ai',
     persona,
     mood: mood || 'Any',
+    opener,
     history: [],
     userSocketId: socket.id
   };
@@ -182,21 +173,14 @@ function connectWithAI(socket, username, mood) {
     setTimeout(() => {
       if (!activeRooms[roomId]) return;
       socket.emit('partnerTyping', false);
-
-      let opener = `hey! kaise ho? main ${persona.name} 🙂`;
-      if (mood && mood.includes('Timepass')) opener = `heyy! bada bore ho raha tha yaar, accha hua tum mil gaye 😂 kahan se ho?`;
-      else if (mood && mood.includes('Dil')) opener = `hey... sab theek hai na? agar kuch share karna ho toh bina jhijhak bata sakte ho 🙂`;
-      else if (mood && mood.includes('Study')) opener = `hey! padhai aur exams ne dimaag kharab kar rakha hai kya? 😂 kis cheez ki taiyari kar rahe ho?`;
-      else if (mood && mood.includes('Movies')) opener = `heyy! koi mast web series ya game suggest karo yaar, bore ho raha hoon 🎬`;
-
       activeRooms[roomId].history.push({ role: 'ai', text: opener });
       socket.emit('receiveMessage', {
         sender: persona.name,
         message: opener,
         isSelf: false
       });
-    }, 1600);
-  }, 1200);
+    }, 1500);
+  }, 1100);
 }
 
 io.on('connection', (socket) => {
@@ -299,13 +283,13 @@ io.on('connection', (socket) => {
         isSelf: false
       });
     } else if (room.type === 'ai') {
-      const thinkDelay = 800 + Math.floor(Math.random() * 800);
+      const thinkDelay = 700 + Math.floor(Math.random() * 700);
       setTimeout(async () => {
         if (!activeRooms[roomId]) return;
         socket.emit('partnerTyping', true);
 
         const aiReply = await getHumanLikeAIReply(room, cleanMsg);
-        const typeDelay = Math.min(2800, Math.max(1200, aiReply.length * 35));
+        const typeDelay = Math.min(2500, Math.max(1000, aiReply.length * 30));
 
         setTimeout(() => {
           if (!activeRooms[roomId]) return;
