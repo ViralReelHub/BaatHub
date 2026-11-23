@@ -189,6 +189,23 @@ function connectAI(s, username, mood, genderFilter = 'any') {
 
 io.on('connection', (s) => {
   s.emit('onlineCount', getLiveCount());
+
+  s.on('joinAssistant', ({ username }) => {
+    cleanup(s); s.data.skipped = false;
+    const rid = `assist_${s.id}_${Date.now()}`;
+    s.join(rid); s.data.roomId = rid; s.data.username = (username || 'User').trim();
+    rooms[rid] = { type: 'assistant', history: [] };
+  });
+
+  s.on('suggestReply', async ({ lastMsg, mood }) => {
+    const prompt = lastMsg
+      ? `Partner said: "${lastMsg}". Give 1 short witty Hinglish reply (max 10 words) for BaatHub.`
+      : `Give 1 fun casual Hinglish icebreaker line (max 10 words) for BaatHub mood: ${mood || 'Any'}.`;
+    const ai = await callAI('You are a helpful Indian chat wingman. Output ONLY the reply text.', [{ role: 'user', parts: [{ text: prompt }] }]);
+    const fallbackTips = ['aur batao aaj ka kya plan h? 😄', 'waise tumhari favourite movie kaunsi h?', 'ek truth ya dare khelein kya? 🎲', 'tumhari vibe kaafi chill lag rhi h 🙂'];
+    s.emit('suggestedReply', ai?.text || fallbackTips[Math.floor(Math.random() * fallbackTips.length)]);
+  });
+
   s.on('joinRandom', (pl) => {
     cleanup(s); s.data.skipped = false;
     const username = (typeof pl === 'object' ? pl.username : pl)?.trim() || 'Stranger', mood = (typeof pl === 'object' ? pl.mood : 'Any') || 'Any', gFilter = (typeof pl === 'object' && pl.genderFilter === 'girl') ? 'girl' : 'any';
@@ -209,6 +226,7 @@ io.on('connection', (s) => {
       queue.push({ socketId: s.id, username, mood, timer });
     }
   });
+
   s.on('joinPrivate', ({ username, roomCode }) => {
     cleanup(s); s.data.skipped = false;
     const name = (username || 'Guest').trim(), code = (roomCode || 'ROOM1').trim().toUpperCase(), rid = `private_${code}`;
@@ -217,7 +235,8 @@ io.on('connection', (s) => {
     s.emit('chatStarted', { partnerName: `Room: ${code}`, isPrivate: true, roomCode: code });
     s.to(rid).emit('systemMessage', `${name} ne room join kiya!`);
   });
-  s.on('sendMessage', (pl) => {
+
+  s.on('sendMessage', async (pl) => {
     if (s.data.skipped) return;
     const msg = (typeof pl === 'object' ? pl.message : pl || '').trim(), image = pl?.image || null, audioData = pl?.audioData || null;
     if (!msg && !image && !audioData) return;
@@ -229,17 +248,4 @@ io.on('connection', (s) => {
       s.data.username = (pl?.username || s.data.username || 'Stranger').trim();
       const p = personas.find(x => x.name === (pl?.partnerName || '').trim()) || personas[0];
       rid = `ai_${s.id}_${Date.now()}`; s.join(rid); s.data.roomId = rid;
-      rooms[rid] = { type: 'ai', persona: p, mood: pl?.mood || 'Any', mem: {}, history: [], used: new Set(), count: 0, media: 0, pending: [], timer: null, busy: false };
-    }
-    const r = rooms[rid], sender = s.data.username || 'You';
-    s.emit('receiveMessage', { sender, message: msg, image, audioData, isSelf: true });
-    if (r.type !== 'ai') s.to(rid).emit('receiveMessage', { sender, message: msg, image, audioData, isSelf: false });
-    else { r.pending.push(audioData ? 'User sent a voice note' : (image ? `${msg || ''} [User sent photo]`.trim() : msg)); scheduleAI(s, rid, 900); }
-  });
-  s.on('typing', (isT) => { const rid = s.data.roomId; if (rid && rooms[rid] && rooms[rid].type !== 'ai') s.to(rid).emit('partnerTyping', isT); });
-  s.on('leaveChat', () => cleanup(s));
-  s.on('disconnect', () => cleanup(s));
-});
-
-server.listen(process.env.PORT || 3000, () => console.log('BaatHub live'));
-        
+      rooms[rid] = { type: 'ai', persona: p, mood: pl?.mood || 'Any', mem: {}, history: [], used: new Set(), count: 0, media: 0, pending: [], timer:
