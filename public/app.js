@@ -4,7 +4,7 @@ const socket = io({
   reconnectionDelay: 1000
 });
 
-// Touch & Layer Fix: Taaki neeche ka Ad Banner Send button ko block na kare
+// Touch & Layer Fix
 (function fixChatTouchLayer() {
   const style = document.createElement('style');
   style.textContent = `
@@ -79,9 +79,13 @@ function playPopSound() {
 }
 
 function setChatInputEnabled(enabled, customPlaceholder) {
-  messageInput.disabled = !enabled;
-  diceBtn.disabled = !enabled;
-  messageInput.placeholder = customPlaceholder || (enabled ? 'Apna message likhein...' : 'Chat khatam — naye partner ke liye "Next" dabayein');
+  if (messageInput) {
+    messageInput.disabled = !enabled;
+    messageInput.placeholder = customPlaceholder || (enabled ? 'Apna message likhein...' : 'Chat khatam — naye partner ke liye "Next" dabayein');
+  }
+  if (diceBtn) {
+    diceBtn.disabled = !enabled;
+  }
 }
 
 // Mood Chips Selection
@@ -197,8 +201,6 @@ leaveChatBtn.addEventListener('click', () => {
 
 // Transmit Message with Auto-Reconnect Protection
 function transmitChatMessage(text) {
-  if (!currentSession.active) return;
-
   const payload = {
     message: text,
     partnerName: currentSession.partnerName,
@@ -218,7 +220,7 @@ function transmitChatMessage(text) {
   }
 }
 
-// Truth / Dare Icebreaker Dice Button
+// Truth / Dare Icebreaker Button
 const icebreakers = [
   '🎲 Truth: Apni phone gallery ki sabse aakhri photo kiski hai? Sach batana!',
   '🎲 Truth: Aaj tak ka sabse bada jhooth jo tumne ghar walon se bola ho?',
@@ -226,19 +228,26 @@ const icebreakers = [
   '🎲 Truth: Kis cheez se sabse zyada darr lagta hai?',
   '🎲 Truth: Agar ₹1 Crore abhi mil jayein toh sabse pehla kaam kya karoge?',
   '🎲 Truth: Apne crush ka pehla letter batao 😉',
-  '🎲 Dare: Abhi apni battery percentage aur last played song batao!'
+  '🎲 Dare: Abhi apni battery percentage aur last played song batao!',
+  '🎲 Truth: Koi aisa secret jo tumhare best friend ko bhi nahi pata?',
+  '🎲 Dare: Apne keyboard ke pehle 5 suggested words bina soche bhej do!',
+  '🎲 Truth: School ya college ka sabse embarrassing moment kaunsa tha?',
+  '🎲 Truth: Agar ek din ke liye invisible ho jao toh sabse pehle kya karoge?',
+  '🎲 Dare: Abhi bina emoji use kiye apna mood 3 words mein likho!'
 ];
 
-diceBtn.addEventListener('click', () => {
-  if (!currentSession.active) return;
-  const randomPrompt = icebreakers[Math.floor(Math.random() * icebreakers.length)];
-  transmitChatMessage(randomPrompt);
-});
+if (diceBtn) {
+  diceBtn.addEventListener('click', () => {
+    if (messageInput && messageInput.disabled) return;
+    const randomPrompt = icebreakers[Math.floor(Math.random() * icebreakers.length)];
+    transmitChatMessage(randomPrompt);
+  });
+}
 
 // Send Message
 messageForm.addEventListener('submit', (e) => {
   e.preventDefault();
-  if (!currentSession.active) return;
+  if (messageInput && messageInput.disabled) return;
   const msg = messageInput.value.trim();
   if (!msg) return;
   transmitChatMessage(msg);
@@ -247,7 +256,7 @@ messageForm.addEventListener('submit', (e) => {
 });
 
 messageInput.addEventListener('input', () => {
-  if (!socket.connected || !currentSession.active) return;
+  if (!socket.connected || messageInput.disabled) return;
   socket.emit('typing', true);
   clearTimeout(typingTimeout);
   typingTimeout = setTimeout(() => {
