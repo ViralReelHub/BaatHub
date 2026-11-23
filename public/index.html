@@ -20,9 +20,11 @@
   </header>
 
   <nav id="navDrawer" class="drawer hidden">
-    <button id="navTextChat">💬 Live Chat</button>
+    <button id="navTextChat">💬 Text Chat</button>
+    <button id="navVoiceChat">🎤 Voice Chat</button>
+    <button id="navVideoChat">📹 Video Chat</button>
     <button id="navPrivateRoom">🔒 Private Room</button>
-    <button id="navUnlockGirl">🔒 Unlock Girl Mode</button>
+    <button id="navUnlockGirl">💖 Girl Mode Lock</button>
     <a href="#guides">📖 Guides</a>
     <a href="/privacy">Privacy Policy</a>
     <a href="/terms">Terms of Service</a>
@@ -30,11 +32,8 @@
 
   <main id="landingView" class="wrap">
     <section class="hero-card">
-      <div class="preview-chat">
-        <div class="p-bub left">Hey 👋</div>
-        <div class="p-bub right">Hi! Where you from?</div>
-        <div class="p-dots">•••</div>
-      </div>
+      <!-- Live Animated Preview Box -->
+      <div class="preview-chat" id="motionPreviewBox"></div>
 
       <h1 class="hero-title">Chat with <span>Strangers</span></h1>
 
@@ -49,7 +48,7 @@
         <button type="button" class="mode-btn" data-mode="video">📹 Video</button>
       </div>
 
-      <button id="mainStartBtn" class="cta-main">Start Live Chat →</button>
+      <button id="mainStartBtn" class="cta-main">Start Text Chat →</button>
 
       <div class="extra-opts">
         <div class="field-box">
@@ -78,11 +77,11 @@
 
     <section class="sec-card">
       <h2>BaatHub vs Other Chat Apps</h2>
-      <p>Fast browser chat with moods, private rooms, and optional Girl Mode pass.</p>
+      <p>Fast browser chat with Text, Voice, and Video modes, moods, and optional Girl Mode pass.</p>
       <table class="comp-table">
         <thead><tr><th>Feature</th><th>BaatHub</th><th>Monkey</th><th>OmeTV</th></tr></thead>
         <tbody>
-          <tr><td>Browser chat</td><td class="yes">Yes</td><td class="no">App</td><td class="yes">Yes</td></tr>
+          <tr><td>Text / Voice / Video</td><td class="yes">All 3</td><td class="no">App</td><td class="mid">Limited</td></tr>
           <tr><td>No signup</td><td class="yes">Yes</td><td class="no">Required</td><td class="yes">Yes</td></tr>
           <tr><td>Girl Mode pass</td><td class="yes">VIP</td><td class="mid">Paid</td><td class="mid">Paid</td></tr>
           <tr><td>Private rooms</td><td class="yes">Yes</td><td class="no">No</td><td class="no">No</td></tr>
@@ -94,22 +93,22 @@
       <h2>Quick Community Guides</h2>
       <div class="guide-item">
         <span>📖</span>
-        <h3>How Girl Mode & Random Match Work</h3>
-        <p>Default random mode connects anyone available; subscribe to unlock dedicated Girl Mode.</p>
+        <h3>Text, Voice & Video Modes Guide</h3>
+        <p>Switch seamlessly between Text chat, live Voice mic talk, and Video cam chat anytime.</p>
         <a href="#faq" class="guide-link">Read more →</a>
       </div>
       <div class="guide-item">
         <span>📖</span>
-        <h3>Safe Anonymous Chatting Tips</h3>
-        <p>Keep personal info private, tap Next anytime, and keep chats respectful.</p>
+        <h3>Girl Mode & Safe Chatting</h3>
+        <p>Default random mode matches anyone; subscribe to unlock Girl Mode filter.</p>
         <a href="#faq" class="guide-link">Read more →</a>
       </div>
     </section>
 
     <section id="faq" class="sec-card">
       <h2>Frequently Asked Questions</h2>
-      <details><summary>Is random chat free?</summary><p>Yes, random chat and private rooms are free in your browser.</p></details>
-      <details><summary>Why is Girl Mode locked?</summary><p>Girl Mode is a subscription feature; without it, random matching connects anyone available.</p></details>
+      <details><summary>Are Text, Voice, and Video modes all available?</summary><p>Yes, all three modes are active and you can switch between them inside chat.</p></details>
+      <details><summary>Why is Girl Mode locked?</summary><p>Girl Mode requires subscription; without it, random matching connects anyone available.</p></details>
     </section>
 
     <div class="footer-grid">
@@ -122,8 +121,33 @@
   <section id="chatView" class="chat-screen hidden">
     <div class="chat-subbar">
       <button type="button" id="chatGirlLockBtn" class="girl-lock-btn">🔒 Girl Mode</button>
-      <span id="chatStatusLabel" style="font-size:0.78rem; color:#94a3b8; font-weight:700;">Ready</span>
+      <div class="mini-modes" id="miniModeBar">
+        <button type="button" class="mini-m-btn active" data-mm="text">Text</button>
+        <button type="button" class="mini-m-btn" data-mm="voice">Voice</button>
+        <button type="button" class="mini-m-btn" data-mm="video">Video</button>
+      </div>
       <button type="button" id="exitChatBtn" class="filter-pill">Exit</button>
+    </div>
+
+    <div id="voicePanel" class="media-stage hidden">
+      <div class="voice-bar">
+        <div>
+          <div style="font-size:0.84rem; font-weight:700;" id="voiceStatusText">🎤 Voice Mode Ready</div>
+          <div style="font-size:0.74rem; color:#94a3b8;">Bolkar message bhejein ya AI voice reply sunein</div>
+        </div>
+        <button type="button" id="micToggleBtn" class="send-btn">🎙️ Speak</button>
+      </div>
+    </div>
+
+    <div id="videoPanel" class="media-stage hidden">
+      <div class="cam-box" id="partnerCamBox">
+        <span id="partnerCamLabel" style="font-size:0.8rem; color:#cbd5e1; font-weight:700; padding:8px;">Stranger Cam Live</span>
+        <span class="cam-tag">Partner</span>
+      </div>
+      <div class="cam-box">
+        <video id="localVideoEl" autoplay playsinline muted></video>
+        <span class="cam-tag">You</span>
+      </div>
     </div>
 
     <div id="chatStream" class="chat-body">
