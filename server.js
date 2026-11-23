@@ -91,7 +91,10 @@ async function callAI(sys, contents) {
 function assistantSmartFallback(userMsg) {
   const m = (userMsg || '').toLowerCase().trim();
   if (!m || /\b(hi|hello|hey|namaste|kya haal|kaise ho|kaisa h)\b/i.test(m)) {
-    return 'Hey! Main BaatHub AI Assistant hoon ✨ Aap mujhse chat lines, flirting/icebreaker ideas, study/GK doubts, ya kisi bhi topic par baat kar sakte hain.';
+    return 'Hey! Main BaatHub AI Assistant hoon ✨ Aap mujhse chat lines, flirting/icebreaker ideas, Girl Mode tips, ya kisi bhi topic par baat kar sakte hain.';
+  }
+  if (/\b(girl|girls|ladki|suggest|match|filter)\b/i.test(m)) {
+    return 'Girls suggest karwane ke liye top bar ya chat bar mein "🔒 Girl Mode" button par tap karein aur unlock/subscribe karke Girl Mode ON kar lein—phir random chat mein sirf girl profiles match hongi.';
   }
   if (/\b(flirt|line|impress|pickup|crush|pyar|love)\b/i.test(m)) {
     return 'Try yeh line: "Tumhari baatein itni chill hain ki chat karte waqt time ka pata hi nahi chalta 😊"';
@@ -291,27 +294,45 @@ io.on('connection', (s) => {
     const now = Date.now();
     if (!image && !audioData && s.data.lastMsg === msg && now - (s.data.lastTime || 0) < 900) return;
     s.data.lastMsg = msg; s.data.lastTime = now;
+
+    const wantsAssistant = Boolean(pl?.isAssistant || pl?.mode === 'ai');
     let rid = s.data.roomId;
-    if (!rid || !rooms[rid]) {
-      s.data.username = (pl?.username || s.data.username || 'Stranger').trim();
-      const p = personas.find(x => x.name === (pl?.partnerName || '').trim()) || personas[0];
-      rid = `ai_${s.id}_${Date.now()}`; s.join(rid); s.data.roomId = rid;
-      rooms[rid] = { type: 'ai', persona: p, mood: pl?.mood || 'Any', mem: {}, history: [], used: new Set(), count: 0, media: 0, pending: [], timer: null, busy: false };
+
+    if (!rid || !rooms[rid] || (wantsAssistant && rooms[rid].type !== 'assistant')) {
+      s.data.username = (pl?.username || s.data.username || 'User').trim();
+      if (wantsAssistant) {
+        rid = `assist_${s.id}_${Date.now()}`;
+        s.join(rid);
+        s.data.roomId = rid;
+        rooms[rid] = { type: 'assistant', history: [] };
+      } else {
+        const p = personas.find(x => x.name === (pl?.partnerName || '').trim()) || personas[0];
+        rid = `ai_${s.id}_${Date.now()}`;
+        s.join(rid);
+        s.data.roomId = rid;
+        rooms[rid] = { type: 'ai', persona: p, mood: pl?.mood || 'Any', mem: {}, history: [], used: new Set(), count: 0, media: 0, pending: [], timer: null, busy: false };
+      }
     }
+
     const r = rooms[rid], sender = s.data.username || 'You';
     s.emit('receiveMessage', { sender, message: msg, image, audioData, isSelf: true });
+
     if (r.type === 'assistant') {
       const userPrompt = msg || 'Voice/Photo sent';
       r.history.push({ role: 'user', text: userPrompt });
       s.emit('partnerTyping', true);
       const contents = r.history.slice(-16).map(h => ({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.text }] }));
-      const ai = await callAI('You are BaatHub AI Assistant. Reply clearly, naturally, and helpfully in Hinglish or English.', contents);
+      const ai = await callAI(
+        'You are BaatHub AI Assistant. Answer directly in Hinglish or English. If the user asks how to get girl matches on BaatHub, tell them to tap the Girl Mode button to unlock Girl Mode filter.',
+        contents
+      );
       const replyText = ai?.text || assistantSmartFallback(userPrompt);
       r.history.push({ role: 'ai', text: replyText });
       s.emit('partnerTyping', false);
       s.emit('receiveMessage', { sender: 'BaatHub AI', message: replyText, isSelf: false });
       return;
     }
+
     if (r.type !== 'ai') s.to(rid).emit('receiveMessage', { sender, message: msg, image, audioData, isSelf: false });
     else { r.pending.push(audioData ? 'User sent a voice note' : (image ? `${msg || ''} [User sent photo]`.trim() : msg)); scheduleAI(s, rid, 900); }
   });
