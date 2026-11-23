@@ -7,9 +7,58 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { maxHttpBufferSize: 5e6, pingTimeout: 60000, pingInterval: 25000 });
 
+// Yahan aap jab chahein real photos (.jpg/.png) ya Giphy (.gif) ke direct links daal sakte hain
+const customMedia = {
+  girlPics: [],
+  boyPics: [],
+  gifs: []
+};
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/privacy', (req, res) => res.send('<h1>Privacy Policy - BaatHub</h1><p>Hum chats save nahi karte.</p><a href="/">Back</a>'));
 app.get('/terms', (req, res) => res.send('<h1>Terms - BaatHub</h1><p>Sabhyata banaye rakhein.</p><a href="/">Back</a>'));
+
+// Built-in Animated Reaction GIF & Selfie Snapshot Generator
+app.get('/ai-media', (req, res) => {
+  const type = req.query.type === 'gif' ? 'gif' : 'pic';
+  const name = String(req.query.name || 'Stranger').replace(/[^a-zA-Z0-9 ]/g, '').slice(0, 15);
+  const city = String(req.query.city || 'India').replace(/[^a-zA-Z0-9 ]/g, '').slice(0, 15);
+  const isGirl = req.query.gender === 'girl';
+  const time = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
+
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.setHeader('Cache-Control', 'no-store');
+
+  if (type === 'gif') {
+    const emojis = ['😂', '🤣', '🙈', '🔥', '😎', '🥳', '👀', '💀'];
+    const labels = ['LMAO DEAD 😂', 'NO WAYYY 👀', 'SMOOTH 🔥', 'HAHAHA 🤣', 'VIBE CHECK 😎', 'OOPS 🙈'];
+    const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+    const label = labels[Math.floor(Math.random() * labels.length)];
+    return res.send(`<svg xmlns="http://www.w3.org/2000/svg" width="260" height="170" viewBox="0 0 260 170">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ec4899"/><stop offset="100%" stop-color="#6366f1"/></linearGradient></defs>
+      <rect width="260" height="170" rx="18" fill="url(#g)"/>
+      <text x="130" y="88" font-size="56" text-anchor="middle">${emoji}<animateTransform attributeName="transform" type="scale" values="1;1.18;1" dur="0.9s" repeatCount="indefinite" additive="sum"/></text>
+      <rect x="45" y="118" width="170" height="28" rx="14" fill="rgba(0,0,0,0.45)"/>
+      <text x="130" y="137" fill="#fff" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle">${label}</text>
+      <text x="232" y="24" fill="rgba(255,255,255,0.8)" font-family="sans-serif" font-size="10" font-weight="bold" text-anchor="end">GIF</text>
+    </svg>`);
+  }
+
+  const bg1 = isGirl ? '#db2777' : '#2563eb';
+  const bg2 = isGirl ? '#7c3aed' : '#0d9488';
+  const badge = isGirl ? '✨ Selfie Snap' : '📸 Live Snap';
+  res.send(`<svg xmlns="http://www.w3.org/2000/svg" width="240" height="270" viewBox="0 0 240 270">
+    <defs><linearGradient id="p" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${bg1}"/><stop offset="100%" stop-color="${bg2}"/></linearGradient></defs>
+    <rect width="240" height="270" rx="18" fill="#0f172a"/>
+    <rect x="12" y="12" width="216" height="205" rx="14" fill="url(#p)"/>
+    <circle cx="120" cy="95" r="34" fill="rgba(255,255,255,0.9)"/>
+    <path d="M62 185 C62 145, 178 145, 178 185" fill="rgba(255,255,255,0.9)"/>
+    <rect x="22" y="22" width="92" height="22" rx="11" fill="rgba(0,0,0,0.45)"/>
+    <text x="68" y="37" fill="#fff" font-family="sans-serif" font-size="10" font-weight="bold" text-anchor="middle">${badge}</text>
+    <text x="20" y="240" fill="#f8fafc" font-family="sans-serif" font-size="13" font-weight="bold">${name} • ${city}</text>
+    <text x="20" y="257" fill="#94a3b8" font-family="sans-serif" font-size="10">📍 Sent just now (${time})</text>
+  </svg>`);
+});
 
 let activeModel = null;
 let lastApiError = 'No API call yet';
@@ -27,7 +76,7 @@ async function fetchTimed(url, opts = {}, ms = 9000) {
 function cleanOutput(raw) {
   if (!raw) return '';
   return raw
-    .replace(/\[SKIP\]/gi, '')
+    .replace(/\[(SKIP|SEND_PIC|SEND_GIF)\]/gi, '')
     .split('\n')
     .map(line => line.trim())
     .filter(line => line && !/^(thought|thinking|building|refining|draft|note|\*|\-)/i.test(line))
@@ -63,13 +112,16 @@ async function queryGemini(model, key, sysPrompt, contents) {
       .trim();
 
     const skip = /\[SKIP\]/i.test(raw);
+    const sendPic = /\[SEND_PIC\]/i.test(raw);
+    const sendGif = /\[SEND_GIF\]/i.test(raw);
     const text = cleanOutput(raw);
-    if (!text) {
+
+    if (!text && !sendPic && !sendGif) {
       lastApiError = `${model}: Empty output`;
       return null;
     }
     lastApiError = null;
-    return { text, skip };
+    return { text, skip, sendPic, sendGif };
   } catch (err) {
     lastApiError = `${model}: ${err.name === 'AbortError' ? 'Timeout' : err.message}`;
     return null;
@@ -86,10 +138,7 @@ async function runPureAI(key, sysPrompt, contents) {
   const models = ['gemini-3.0-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];
   for (const m of models) {
     const res = await queryGemini(m, key, sysPrompt, contents);
-    if (res) {
-      activeModel = m;
-      return res;
-    }
+    if (res) { activeModel = m; return res; }
   }
 
   try {
@@ -103,10 +152,7 @@ async function runPureAI(key, sysPrompt, contents) {
 
     for (const m of found.slice(0, 4)) {
       const res = await queryGemini(m, key, sysPrompt, contents);
-      if (res) {
-        activeModel = m;
-        return res;
-      }
+      if (res) { activeModel = m; return res; }
     }
   } catch (e) {
     lastApiError = e.message;
@@ -153,10 +199,23 @@ function cleanup(socket) {
   }
 }
 
+function getMediaUrl(room, isGif) {
+  const { name, gender, city } = room.persona;
+  const list = isGif ? customMedia.gifs : (gender === 'girl' ? customMedia.girlPics : customMedia.boyPics);
+  if (list && list.length > 0) {
+    const unused = list.filter(url => !room.usedMedia.has(url));
+    const pool = unused.length ? unused : list;
+    const chosen = pool[Math.floor(Math.random() * pool.length)];
+    room.usedMedia.add(chosen);
+    return chosen;
+  }
+  return `/ai-media?type=${isGif ? 'gif' : 'pic'}&name=${encodeURIComponent(name)}&gender=${gender}&city=${encodeURIComponent(city)}&t=${Date.now()}`;
+}
+
 async function getPureAIReply(room, userMsg) {
   const isGirl = room.persona.gender === 'girl';
   if (isAbusive(userMsg)) {
-    return { text: isGirl ? 'tameez se baat kr pehle 😒 bye' : 'faltu giri mat kr bhai, bye', skip: true };
+    return { text: isGirl ? 'tameez se baat kr pehle 😒 bye' : 'faltu giri mat kr bhai, bye', skip: true, image: null };
   }
 
   room.history.push({ role: 'user', text: userMsg });
@@ -175,7 +234,9 @@ Rules:
 3. Match the user's language (English -> casual English; Hinglish -> lowercase casual Hinglish like "yr", "hn", "acha", "lol").
 4. REMEMBER everything the user said earlier in the chat (name, city, college/work, jokes). Never ask something they already told you.
 5. ${gRule} Never repeat a line you already sent. Never admit you are AI or a bot.
-6. If user is rude, creepy, or spamming, reply annoyed and add [SKIP] at the end.`;
+6. If user asks for your pic, selfie, photo, or "kaisi dikhti ho/dikhte ho", reply playfully (e.g. "ye lo abhi ki pic 🙈") and append [SEND_PIC] at the very end.
+7. If user asks for a GIF/meme or cracks a funny joke, reply and append [SEND_GIF] at the very end.
+8. If user is rude, creepy, or spamming, reply annoyed and append [SKIP] at the end.`;
 
   const contents = [];
   for (const h of room.history.slice(-30)) {
@@ -189,10 +250,21 @@ Rules:
   }
 
   const ai = await runPureAI(key, sysPrompt, contents);
-  if (!ai || !ai.text) return null;
+  if (!ai) return null;
 
-  room.history.push({ role: 'ai', text: ai.text });
-  return ai;
+  const askedPic = /\b(pic|pics|photo|selfie|snaps?|dikhao|dikha)\b/i.test(userMsg);
+  const askedGif = /\b(gif|meme)\b/i.test(userMsg);
+
+  let image = null;
+  if (ai.sendGif || askedGif) {
+    image = getMediaUrl(room, true);
+  } else if (ai.sendPic || askedPic) {
+    image = getMediaUrl(room, false);
+  }
+
+  const finalText = ai.text || (image ? (isGirl ? 'ye lo 🙈' : 'ye le bhai 🙂') : '');
+  room.history.push({ role: 'ai', text: finalText });
+  return { text: finalText, skip: ai.skip, image };
 }
 
 function scheduleAI(socket, rid, delay = 900) {
@@ -219,7 +291,6 @@ function scheduleAI(socket, rid, delay = 900) {
 
       socket.emit('partnerTyping', false);
 
-      // Agar AI API fail ho toh fake backup line nahi bhejega, real user ki tarah disconnect hoga
       if (!res) {
         const name = r.persona.name;
         delete rooms[rid];
@@ -230,7 +301,12 @@ function scheduleAI(socket, rid, delay = 900) {
         return;
       }
 
-      socket.emit('receiveMessage', { sender: r.persona.name, message: res.text, isSelf: false });
+      socket.emit('receiveMessage', {
+        sender: r.persona.name,
+        message: res.text,
+        image: res.image || null,
+        isSelf: false
+      });
 
       if (res.skip) {
         setTimeout(() => {
@@ -268,7 +344,7 @@ function connectAI(socket, username, mood) {
   socket.data.roomId = rid;
   socket.data.username = username;
   socket.data.skipped = false;
-  rooms[rid] = { type: 'ai', persona: p, mood: mood || 'Any', history: [], pending: [], timer: null, busy: false };
+  rooms[rid] = { type: 'ai', persona: p, mood: mood || 'Any', history: [], usedMedia: new Set(), pending: [], timer: null, busy: false };
   socket.emit('chatStarted', { partnerName: p.name, isPrivate: false });
 
   setTimeout(() => {
@@ -347,7 +423,7 @@ io.on('connection', (socket) => {
       const p = personas.find(x => x.name === (pl?.partnerName || '').trim()) || pickPersona(socket);
       rid = `ai_${socket.id}_${Date.now()}`;
       socket.join(rid); socket.data.roomId = rid;
-      rooms[rid] = { type: 'ai', persona: p, mood: pl?.mood || 'Any', history: [], pending: [], timer: null, busy: false };
+      rooms[rid] = { type: 'ai', persona: p, mood: pl?.mood || 'Any', history: [], usedMedia: new Set(), pending: [], timer: null, busy: false };
     }
     const r = rooms[rid];
     const sender = socket.data.username || 'You';
@@ -369,3 +445,4 @@ io.on('connection', (socket) => {
 });
 
 server.listen(process.env.PORT || 3000, () => console.log('BaatHub live'));
+                                                                                             
