@@ -7,7 +7,6 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { maxHttpBufferSize: 5e6, pingTimeout: 60000, pingInterval: 25000 });
 
-// Chahein toh yahan apni extra Gemini API keys daal sakte hain: ['AIza...', 'AIza...']
 const extraKeys = [];
 
 const realGirlPics = [
@@ -147,8 +146,17 @@ app.get('/test-ai', async (req, res) => {
   res.send(out ? `<h2>✅ Real AI Working (${activeModel})</h2><p>${out.text}</p><a href="/">Back to Chat</a>` : `<h2>❌ API Quota/Key Status:</h2><pre>${lastErr}</pre>`);
 });
 
-const baseOnline = Math.floor(Math.random() * 8) + 25;
-setInterval(() => io.emit('onlineCount', baseOnline + (io.engine.clientsCount || 1) + Math.floor(Math.random() * 4)), 10000);
+// Always 500+ Online Members with live natural fluctuation
+const baseOnline = 515 + Math.floor(Math.random() * 25);
+let liveJitter = Math.floor(Math.random() * 15);
+function getOnlineCount() {
+  const realCount = io.engine.clientsCount || 1;
+  return Math.max(508, baseOnline + realCount + liveJitter);
+}
+setInterval(() => {
+  liveJitter = Math.floor(Math.random() * 24) - 6;
+  io.emit('onlineCount', getOnlineCount());
+}, 8000);
 
 const personas = [
   ['Sneha','girl',20,'Delhi',0],['Aarav','boy',21,'Mumbai',0],['Priya','girl',19,'Jaipur',1],['Rohan','boy',22,'Pune',1],
@@ -410,7 +418,7 @@ function connectAI(s, username, mood) {
 }
 
 io.on('connection', (s) => {
-  s.emit('onlineCount', baseOnline + (io.engine.clientsCount || 1));
+  s.emit('onlineCount', getOnlineCount());
 
   s.on('joinRandom', (pl) => {
     cleanup(s);
@@ -512,5 +520,4 @@ io.on('connection', (s) => {
   s.on('disconnect', () => cleanup(s));
 });
 
-server.listen(process.env.PORT || 3000, () => console.log('BaatHub live'));
-      
+server.listen(process.env.PORT || 3000, () => co
