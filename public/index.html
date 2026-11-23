@@ -93,7 +93,7 @@
       <div class="guide-item">
         <span>📖</span>
         <h3>Text, Voice & Video Modes Guide</h3>
-        <p>Switch seamlessly between Text chat, live Voice mic talk, and Video cam chat anytime.</p>
+        <p>Switch seamlessly between Text chat, live Voice recording talk, and Video cam chat anytime.</p>
         <a href="#faq" class="guide-link">Read more →</a>
       </div>
       <div class="guide-item">
@@ -131,21 +131,22 @@
     <div id="voicePanel" class="media-stage hidden">
       <div class="voice-bar">
         <div>
-          <div style="font-size:0.84rem; font-weight:700;" id="voiceStatusText">🎤 Voice Mic Ready</div>
-          <div style="font-size:0.74rem; color:#94a3b8;">Mic dabakar bolein ya neeche message bhejein</div>
+          <div style="font-size:0.84rem; font-weight:700;" id="voiceStatusText">🎙️ Voice Recording Ready</div>
+          <div style="font-size:0.74rem; color:#94a3b8;">Record dabakar bolein — dono taraf voice clip jayegi</div>
         </div>
-        <button type="button" id="micToggleBtn" class="mic-speak-btn">🎙️ Speak</button>
+        <button type="button" id="micToggleBtn" class="mic-speak-btn">🎙️ Record</button>
       </div>
     </div>
 
     <div id="videoPanel" class="media-stage hidden">
       <div class="cam-box" id="partnerCamBox">
         <img id="partnerFaceImg" class="partner-face" src="https://randomuser.me/api/portraits/women/44.jpg" alt="Partner" />
-        <span class="cam-live-badge">LIVE</span>
+        <span class="cam-live-badge">VC LIVE</span>
         <span class="cam-tag" id="partnerCamTag">Partner</span>
       </div>
       <div class="cam-box">
         <video id="localVideoEl" autoplay playsinline muted></video>
+        <button type="button" id="vcMicBtn" class="filter-pill" style="position:absolute; top:6px; left:8px;">🔊 VC Mic ON</button>
         <span class="cam-tag">You</span>
       </div>
     </div>
