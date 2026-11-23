@@ -31,6 +31,7 @@ const voicePanel = document.getElementById('voicePanel');
 const videoPanel = document.getElementById('videoPanel');
 const voiceStatusText = document.getElementById('voiceStatusText');
 const micToggleBtn = document.getElementById('micToggleBtn');
+const vcMicBtn = document.getElementById('vcMicBtn');
 const localVideoEl = document.getElementById('localVideoEl');
 const partnerFaceImg = document.getElementById('partnerFaceImg');
 const partnerCamTag = document.getElementById('partnerCamTag');
@@ -59,8 +60,23 @@ let girlModeUnlocked = false;
 let genderFilter = 'any';
 let typingTimer;
 let localStream = null;
+let vcMicEnabled = true;
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
 let faceIndex = 0;
 let session = { active: false, isPrivate: false, partnerName: '', roomCode: '', username: 'Stranger' };
+
+function speakReply(text) {
+  if (!text || !('speechSynthesis' in window)) return;
+  try {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'hi-IN';
+    u.rate = 1.02;
+    window.speechSynthesis.speak(u);
+  } catch (_) {}
+}
 
 function setPartnerFace(name = 'Partner') {
   faceIndex = (faceIndex + 1) % partnerFaces.length;
@@ -104,38 +120,68 @@ async function applyModeUI(newMode) {
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       localVideoEl.srcObject = localStream;
-    } catch (_) {}
+      vcMicEnabled = true;
+      vcMicBtn.textContent = '🔊 VC Mic ON';
+    } catch (_) {
+      voiceStatusText.textContent = 'VC audio ready';
+    }
   } else {
     stopLocalCam();
   }
 }
 
+vcMicBtn.addEventListener('click', () => {
+  vcMicEnabled = !vcMicEnabled;
+  if (localStream) localStream.getAudioTracks().forEach(t => { t.enabled = vcMicEnabled; });
+  vcMicBtn.textContent = vcMicEnabled ? '🔊 VC Mic ON' : '🔇 VC Muted';
+  appendSys(vcMicEnabled ? 'VC Mic ON — awaaz sunayi degi' : 'VC Mic MUTED');
+});
+
 document.querySelectorAll('.mode-btn').forEach(btn => btn.addEventListener('click', () => applyModeUI(btn.dataset.mode)));
 document.querySelectorAll('.mini-m-btn').forEach(btn => btn.addEventListener('click', () => applyModeUI(btn.dataset.mm)));
 
-micToggleBtn.addEventListener('click', () => {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    voiceStatusText.textContent = '🎙️ Mic ready — neeche type karke send karein';
-    msgInput.focus();
-    return;
-  }
-  const rec = new SR();
-  rec.lang = 'hi-IN';
-  micToggleBtn.classList.add('listening');
-  micToggleBtn.textContent = '⏹️ Listening...';
-  voiceStatusText.textContent = '🎙️ Sun raha hu... boliye';
-  rec.onresult = (ev) => {
-    const spoken = ev.results[0][0].transcript;
-    if (spoken) sendChat(spoken);
+function sendChat(text, image = null, audioData = null) {
+  if (!session.active) triggerMatch();
+  const payload = {
+    message: text, image, audioData, mode,
+    partnerName: session.partnerName, isPrivate: session.isPrivate,
+    roomCode: session.roomCode, mood, username: session.username
   };
-  rec.onerror = () => { voiceStatusText.textContent = '🎙️ Mic dabakar bolein ya type karein'; };
-  rec.onend = () => {
+  if (socket.connected) socket.emit('sendMessage', payload);
+  else { socket.connect(); socket.once('connect', () => socket.emit('sendMessage', payload)); }
+}
+
+micToggleBtn.addEventListener('click', async () => {
+  if (!isRecording) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
+      mediaRecorder.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          sendChat('🎙️ Voice note', null, reader.result);
+        };
+        reader.readAsDataURL(blob);
+      };
+      mediaRecorder.start();
+      isRecording = true;
+      micToggleBtn.classList.add('listening');
+      micToggleBtn.textContent = '⏹️ Send Voice';
+      voiceStatusText.textContent = '🔴 Recording chal rahi hai... Send Voice dabayein';
+    } catch (_) {
+      voiceStatusText.textContent = '⚠️ Mic permission allow karein ya type karein';
+    }
+  } else {
+    isRecording = false;
     micToggleBtn.classList.remove('listening');
-    micToggleBtn.textContent = '🎙️ Speak';
-    voiceStatusText.textContent = '🎤 Voice Mic Ready';
-  };
-  rec.start();
+    micToggleBtn.textContent = '🎙️ Record';
+    voiceStatusText.textContent = '🎙️ Voice Recording Ready';
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  }
 });
 
 function syncGirlLockUI() {
@@ -220,22 +266,30 @@ function appendSys(txt) {
   chatStream.scrollTop = chatStream.scrollHeight;
 }
 
-function appendMsg(sender, text, isSelf, image) {
+function appendMsg(sender, text, isSelf, image, audioData) {
   emptyLobby.classList.add('hidden');
   const row = document.createElement('div');
   row.className = `m-row ${isSelf ? 'me' : 'them'}`;
   const bub = document.createElement('div');
   bub.className = 'm-bub';
   if (image) { const img = document.createElement('img'); img.src = image; bub.appendChild(img); }
-  if (text) { const sp = document.createElement('span'); sp.textContent = text; bub.appendChild(sp); }
+  if (audioData) {
+    const aud = document.createElement('audio');
+    aud.controls = true;
+    aud.autoplay = !isSelf;
+    aud.src = audioData;
+    aud.style.maxWidth = '210px';
+    bub.appendChild(aud);
+  }
+  if (text && !audioData) {
+    const sp = document.createElement('span');
+    sp.textContent = text;
+    bub.appendChild(sp);
+  }
   row.appendChild(bub);
   chatStream.appendChild(row);
   chatStream.scrollTop = chatStream.scrollHeight;
-  if (!isSelf && text && mode === 'voice' && 'speechSynthesis' in window) {
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'hi-IN';
-    window.speechSynthesis.speak(u);
-  }
+  if (!isSelf && text && (mode === 'voice' || mode === 'video')) speakReply(text);
 }
 
 function triggerMatch() {
@@ -289,17 +343,6 @@ document.getElementById('navPrivateRoom').addEventListener('click', () => {
 document.getElementById('fRandom').addEventListener('click', (e) => { e.preventDefault(); openRandomLobby(); });
 document.getElementById('fRoom').addEventListener('click', (e) => { e.preventDefault(); roomCodeField.focus(); });
 
-function sendChat(text, image = null) {
-  if (!session.active) triggerMatch();
-  const payload = {
-    message: text, image, mode,
-    partnerName: session.partnerName, isPrivate: session.isPrivate,
-    roomCode: session.roomCode, mood, username: session.username
-  };
-  if (socket.connected) socket.emit('sendMessage', payload);
-  else { socket.connect(); socket.once('connect', () => socket.emit('sendMessage', payload)); }
-}
-
 composerForm.addEventListener('submit', (e) => {
   e.preventDefault();
   const t = msgInput.value.trim();
@@ -348,7 +391,7 @@ socket.on('chatStarted', ({ partnerName, isPrivate }) => {
   appendSys(isPrivate ? partnerName : `Connected with ${partnerName}`);
 });
 
-socket.on('receiveMessage', ({ sender, message, image, isSelf }) => appendMsg(sender, message, isSelf, image));
+socket.on('receiveMessage', ({ sender, message, image, audioData, isSelf }) => appendMsg(sender, message, isSelf, image, audioData));
 socket.on('systemMessage', (m) => appendSys(m));
 socket.on('partnerTyping', (t) => { if (t) appendSys('typing...'); });
 socket.on('partnerLeft', (m) => { session.active = false; appendSys(`${m} Hit Next for a new chat.`); });
