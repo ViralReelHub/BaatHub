@@ -5,7 +5,9 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  maxHttpBufferSize: 1e7 // Bade messages ke liye 10MB limit
+});
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -29,6 +31,15 @@ app.get('/sitemap.xml', (req, res) => {
 });
 
 let cachedModel = 'gemini-3.0-flash';
+
+function extractGeminiText(data) {
+  const parts = data?.candidates?.[0]?.content?.parts || [];
+  return parts
+    .filter(p => !p.thought && typeof p.text === 'string')
+    .map(p => p.text)
+    .join('')
+    .trim();
+}
 
 async function resolveWorkingModel(apiKey) {
   try {
@@ -64,7 +75,8 @@ app.get('/test-ai', async (req, res) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: 'Reply in 4 words in Hinglish: aur bhai kya haal' }] }]
+          contents: [{ role: 'user', parts: [{ text: 'Reply casually in 5 words in Hinglish: aur bhai kya haal hai' }] }],
+          generationConfig: { maxOutputTokens: 300 }
         })
       }
     );
@@ -78,7 +90,8 @@ app.get('/test-ai', async (req, res) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: 'Reply in 4 words in Hinglish: aur bhai kya haal' }] }]
+            contents: [{ role: 'user', parts: [{ text: 'Reply casually in 5 words in Hinglish: aur bhai kya haal hai' }] }],
+            generationConfig: { maxOutputTokens: 300 }
           })
         }
       );
@@ -88,7 +101,7 @@ app.get('/test-ai', async (req, res) => {
     if (data.error) {
       return res.send(`<h2>❌ Google API Error:</h2><pre>${JSON.stringify(data.error, null, 2)}</pre>`);
     }
-    const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || 'Empty response';
+    const reply = extractGeminiText(data) || 'Empty response';
     res.send(`<h2>✅ Real AI Connected & Working! (${model})</h2><p><strong>AI Reply:</strong> ${reply}</p><a href="/">Ab Chat Test Karein</a>`);
   } catch (err) {
     res.send(`<h2>❌ Server Error:</h2><p>${err.message}</p>`);
@@ -104,14 +117,32 @@ function broadcastOnlineCount() {
 }
 setInterval(broadcastOnlineCount, 10000);
 
-// AI Personas (Real Indian Users Jaise)
+// 24 Unique Indian Personas (Taaki Naam Kabhi Repeat Na Ho)
 const aiPersonas = [
-  { name: 'Sneha', gender: 'girl', age: 20, city: 'Delhi', hobby: 'reels, momos aur late night music', vibe: 'thodi sarcastic, witty aur friendly' },
-  { name: 'Aarav', gender: 'boy', age: 21, city: 'Mumbai', hobby: 'gaming, cricket aur standup comedy', vibe: 'chill, funny aur bindass' },
-  { name: 'Priya', gender: 'girl', age: 19, city: 'Jaipur', hobby: 'web series, coffee aur travelling', vibe: 'sweet, expressive aur baatuni' },
-  { name: 'Rohan', gender: 'boy', age: 22, city: 'Pune', hobby: 'coding, gym aur movies', vibe: 'friendly, relatable aur curious' },
-  { name: 'Ananya', gender: 'girl', age: 20, city: 'Lucknow', hobby: 'shayari, songs aur gossip', vibe: 'energetic aur playful' },
-  { name: 'Kabir', gender: 'boy', age: 21, city: 'Indore', hobby: 'street food, bikes aur memes', vibe: 'humorous aur casual' }
+  { name: 'Sneha', gender: 'girl', age: 20, city: 'Delhi', hobby: 'reels, momos aur late night songs', vibe: 'thodi sarcastic, witty aur chill' },
+  { name: 'Aarav', gender: 'boy', age: 21, city: 'Mumbai', hobby: 'bgmi, cricket aur standup comedy', vibe: 'bindass, funny aur friendly' },
+  { name: 'Priya', gender: 'girl', age: 19, city: 'Jaipur', hobby: 'web series, cold coffee aur ghumna', vibe: 'sweet, expressive aur baatuni' },
+  { name: 'Rohan', gender: 'boy', age: 22, city: 'Pune', hobby: 'gym, movies aur bike rides', vibe: 'relatable, calm aur friendly' },
+  { name: 'Ananya', gender: 'girl', age: 20, city: 'Lucknow', hobby: 'shayari, music aur gossip', vibe: 'energetic, playful aur thodi dramatic' },
+  { name: 'Kabir', gender: 'boy', age: 21, city: 'Indore', hobby: 'street food, memes aur football', vibe: 'humorous aur casual' },
+  { name: 'Riya', gender: 'girl', age: 21, city: 'Chandigarh', hobby: 'punjabi songs, shopping aur cafes', vibe: 'confident, frank aur mastmaula' },
+  { name: 'Dev', gender: 'boy', age: 20, city: 'Noida', hobby: 'coding, anime aur night walks', vibe: 'thoda introvert par mast dost' },
+  { name: 'Kavya', gender: 'girl', age: 19, city: 'Bhopal', hobby: 'sketching, novels aur chai', vibe: 'soft-spoken, genuine aur caring' },
+  { name: 'Aditya', gender: 'boy', age: 22, city: 'Bengaluru', hobby: 'startups, coffee aur tech', vibe: 'smart, chill aur observant' },
+  { name: 'Nidhi', gender: 'girl', age: 20, city: 'Patna', hobby: 'ssc prep, music aur comedy shows', vibe: 'hardworking par abhi break par hai' },
+  { name: 'Yash', gender: 'boy', age: 21, city: 'Ahmedabad', hobby: 'garba, business ideas aur movies', vibe: 'energetic aur jolly' },
+  { name: 'Tanya', gender: 'girl', age: 21, city: 'Gurugram', hobby: 'fashion, bollywood aur brunch', vibe: 'bubbly, straight-forward aur fun' },
+  { name: 'Karan', gender: 'boy', age: 23, city: 'Dehradun', hobby: 'pahad, photography aur acoustic guitar', vibe: 'deep thinker aur poetic' },
+  { name: 'Simran', gender: 'girl', age: 20, city: 'Amritsar', hobby: 'food, reels aur doston ke saath masti', vibe: 'full-on Punjabi energy aur warm' },
+  { name: 'Harsh', gender: 'boy', age: 19, city: 'Kanpur', hobby: 'cricket, memes aur college bakchodi', vibe: 'desi humour aur friendly' },
+  { name: 'Meera', gender: 'girl', age: 22, city: 'Kolkata', hobby: 'books, indie music aur street food', vibe: 'thoughtful, artsy aur witty' },
+  { name: 'Siddharth', gender: 'boy', age: 21, city: 'Hyderabad', hobby: 'biryani, gaming aur thriller movies', vibe: 'cool, grounded aur easygoing' },
+  { name: 'Pooja', gender: 'girl', age: 20, city: 'Varanasi', hobby: 'ghats, classical fusion aur tea', vibe: 'simple, sweet aur observant' },
+  { name: 'Manish', gender: 'boy', age: 22, city: 'Ranchi', hobby: 'bikes, cricket aur old hindi songs', vibe: 'down to earth aur loyal dost type' },
+  { name: 'Isha', gender: 'girl', age: 19, city: 'Surat', hobby: 'dance, skincare aur kdramas', vibe: 'cute, talkative aur expressive' },
+  { name: 'Vikram', gender: 'boy', age: 23, city: 'Jodhpur', hobby: 'travelling, photography aur gym', vibe: 'mature, chill aur supportive' },
+  { name: 'Shreya', gender: 'girl', age: 21, city: 'Nagpur', hobby: 'podcasts, psychology aur chocolates', vibe: 'curious, empathetic aur smart' },
+  { name: 'Nikhil', gender: 'boy', age: 20, city: 'Agra', hobby: 'youtube, gaming aur late night chats', vibe: 'casual, funny aur nocturnal' }
 ];
 
 let waitingQueue = [];
@@ -156,9 +187,9 @@ async function callGeminiModel(modelName, apiKey, systemPrompt, contents) {
           { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' }
         ],
         generationConfig: {
-          temperature: 1.05,
+          temperature: 1.1,
           topP: 0.95,
-          maxOutputTokens: 200
+          maxOutputTokens: 800
         }
       })
     }
@@ -168,11 +199,11 @@ async function callGeminiModel(modelName, apiKey, systemPrompt, contents) {
     console.error(`Gemini (${modelName}) Error:`, data.error.message);
     return { error: true };
   }
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
-  return { text };
+  const text = extractGeminiText(data);
+  return { text: text || null };
 }
 
-// Real Gemini AI Conversation Engine
+// Real Human-Like Hinglish AI Conversation Engine
 async function getHumanLikeAIReply(room, userMsg) {
   const { persona, mood, history, opener, usedFallbacks } = room;
   history.push({ role: 'user', text: userMsg });
@@ -180,14 +211,16 @@ async function getHumanLikeAIReply(room, userMsg) {
   const apiKey = (process.env.GEMINI_API_KEY || '').trim();
   if (apiKey) {
     try {
-      const systemPrompt = `Tum ek real Indian ${persona.gender === 'girl' ? 'ladki' : 'ladka'} ho jiska naam ${persona.name} hai (age ${persona.age}, city ${persona.city}, hobbies: ${persona.hobby}, nature: ${persona.vibe}). Tum BaatHub par ek stranger se live chat kar rahe ho jiska mood "${mood}" hai. Tumne pehla message bheja tha: "${opener}".
+      const systemPrompt = `Tum ek 100% real Indian ${persona.gender === 'girl' ? 'ladki' : 'ladka'} ho jiska naam ${persona.name} hai (age ${persona.age}, city ${persona.city}, interests: ${persona.hobby}, personality: ${persona.vibe}). Tum abhi BaatHub par ek random stranger se chat kar rahe ho (mood: "${mood}"). Tumne chat ki shuruat is message se ki thi: "${opener}".
 
-Rules:
-1. Bilkul asli Indian college student ki tarah casual Hinglish (Roman Hindi + English) mein 1-2 lines ke chhote WhatsApp-style replies do.
-2. User ke message ka exact, natural aur naya jawab do—kabhi bhi apni baat repeat mat karo.
-3. Kabhi mat maanna ki tum AI ya bot ho. Koi puche toh has kar casual jawab do ("pagal ho kya, ${persona.city} se hoon main 😂").`;
+Bilkul Real Insaan Lagne Ke Rules:
+1. Texting style: Bilkul asli Indian youngster ki tarah lowercase mein casual Hinglish likho (jaise "yr", "acha", "hn", "nhi", "sach me", "kya scene", "lol", "bro"). Formal Hindi ya textbook English bilkul mat likhna, aur har sentence ke end mein full-stop (.) mat lagana.
+2. Message length match karo: Agar user chhota message bheje (jaise "hi" ya "kya kr rhe ho"), toh 1 chhoti line mein jawab do. Agar user bada paragraph ya apni koi story/problem likhe, toh dhyan se padhkar 2-4 lines mein genuine, emotional aur detailed reaction do.
+3. Interview mat lo: Har message ke end mein sawal mat poocho! Kabhi sirf react karo, mazak karo, apni life ki koi chhoti baat batao, ya user ki baat par comment karo—jaise real dost karte hain.
+4. Kabhi mat maanna ki tum AI, bot ya program ho: Agar koi shak kare ya puche "tum AI ho kya?", toh has kar casual jawab do (jaise "pagal h kya ${persona.city} me baitha hu mai 😂" ya "itni jaldi judge kr liya bhai, insaan hi hu").
+5. Kabhi bhi apni purani line ya pattern repeat mat karo.`;
 
-      const recent = history.slice(-14);
+      const recent = history.slice(-16);
       const contents = [];
       for (const item of recent) {
         const role = item.role === 'user' ? 'user' : 'model';
@@ -200,7 +233,7 @@ Rules:
       }
 
       let result = await callGeminiModel(cachedModel, apiKey, systemPrompt, contents);
-      if (result.error) {
+      if (result.error || !result.text) {
         const newModel = await resolveWorkingModel(apiKey);
         result = await callGeminiModel(newModel, apiKey, systemPrompt, contents);
       }
@@ -214,16 +247,14 @@ Rules:
     }
   }
 
-  // Non-repeating backup pool
+  // Backup pool (agar kabhi API key quota hit ho jaye)
   const backupReplies = [
-    `haha sahi bol rahe ho yaar! waise tum kahan se ho?`,
-    `achha ek baat batao, abhi study kar rahe ho ya job?`,
-    `main ${persona.city} se hoon, yahan toh aaj mausam mast ho raha hai. tumhare wahan kaisa hai?`,
-    `waise tumhe free time mein kya karna sabse zyada pasand hai?`,
-    `koi achhi movie ya web series suggest karo yaar, dekhne ke liye kuch nahi mil raha`,
-    `haha bilkul! aaj poora din kaisa gaya tumhara?`,
-    `sach mein? waise tum kis type ke gaane sunte ho zyada?`,
-    `arey wah! agar abhi kahin ghumne jaane ka mauka mile toh kahan jaoge?`
+    `acha yr sahi h, mai ${persona.city} se hu waise, tum kahan se ho?`,
+    `lol sach me? aajkal toh bas yahi sab chal rha h life me`,
+    `yr aaj subah se itna bore ho rha tha, socha kisi random bande se hi baat kr lu`,
+    `waise tum abhi clg me ho ya job wagera kr rhe ho?`,
+    `koi mast movie ya series btao yr dekhne ke liye, dimaag kharab ho gya h scroll krte krte`,
+    `haha baat toh sahi boli tumne, bilkul agree krta hu`
   ];
 
   const available = backupReplies.filter(r => !usedFallbacks.has(r));
@@ -235,15 +266,36 @@ Rules:
   return chosen;
 }
 
+function pickUniquePersona(socket) {
+  if (!socket.data.seenPersonas) {
+    socket.data.seenPersonas = new Set();
+  }
+  let available = aiPersonas.filter(p => !socket.data.seenPersonas.has(p.name));
+  if (available.length === 0) {
+    socket.data.seenPersonas.clear();
+    available = aiPersonas;
+  }
+  const chosen = available[Math.floor(Math.random() * available.length)];
+  socket.data.seenPersonas.add(chosen.name);
+  return chosen;
+}
+
 function connectWithAI(socket, username, mood) {
-  const persona = aiPersonas[Math.floor(Math.random() * aiPersonas.length)];
+  const persona = pickUniquePersona(socket);
   const roomId = `ai_${socket.id}_${Date.now()}`;
 
-  let opener = `hey! kaise ho? main ${persona.name} 🙂`;
-  if (mood && mood.includes('Timepass')) opener = `heyy! bada bore ho raha tha yaar, accha hua tum mil gaye 😂 kahan se ho?`;
-  else if (mood && mood.includes('Dil')) opener = `hey... sab theek hai na? agar kuch share karna ho toh bina jhijhak bata sakte ho 🙂`;
-  else if (mood && mood.includes('Study')) opener = `hey! padhai aur exams ne dimaag kharab kar rakha hai kya? 😂 kis cheez ki taiyari kar rahe ho?`;
-  else if (mood && mood.includes('Movies')) opener = `heyy! koi mast web series ya game suggest karo yaar, bore ho raha hoon 🎬`;
+  const casualOpeners = [
+    `hey! kya haal hai? mai ${persona.name} 🙂`,
+    `heyy, kahan se ho? mai ${persona.city} se hu`,
+    `hi! aaj bada bore ho rha tha yaar, kya scene chal rha h?`,
+    `heyy ${persona.name} here, kaise ho?`
+  ];
+  let opener = casualOpeners[Math.floor(Math.random() * casualOpeners.length)];
+
+  if (mood && mood.includes('Timepass')) opener = `heyy! full bore ho rha tha yr, accha hua tum mil gaye 😂 kahan se ho?`;
+  else if (mood && mood.includes('Dil')) opener = `hey... sab theek h na? agar kuch mann me ho toh bina soche bta sakte ho 🙂`;
+  else if (mood && mood.includes('Study')) opener = `hey! padhai aur exams ne dimaag kharab kr rakha h kya 😂 kis cheez ki prep kr rhe ho?`;
+  else if (mood && mood.includes('Movies')) opener = `heyy! koi mast web series ya game suggest kro yr, kuch dekhne ko nhi mil rha 🎬`;
 
   socket.join(roomId);
   socket.data.roomId = roomId;
@@ -278,7 +330,7 @@ function connectWithAI(socket, username, mood) {
         isSelf: false
       });
     }, 1500);
-  }, 1100);
+  }, 1000);
 }
 
 io.on('connection', (socket) => {
@@ -387,7 +439,7 @@ io.on('connection', (socket) => {
         socket.emit('partnerTyping', true);
 
         const aiReply = await getHumanLikeAIReply(room, cleanMsg);
-        const typeDelay = Math.min(2500, Math.max(1000, aiReply.length * 30));
+        const typeDelay = Math.min(3200, Math.max(1100, aiReply.length * 25));
 
         setTimeout(() => {
           if (!activeRooms[roomId]) return;
@@ -423,3 +475,4 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server chal raha hai: http://localhost:${PORT}`);
 });
+                                   
