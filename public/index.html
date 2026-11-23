@@ -32,7 +32,6 @@
 
   <main id="landingView" class="wrap">
     <section class="hero-card">
-      <!-- Live Animated Preview Box -->
       <div class="preview-chat" id="motionPreviewBox"></div>
 
       <h1 class="hero-title">Chat with <span>Strangers</span></h1>
@@ -132,17 +131,18 @@
     <div id="voicePanel" class="media-stage hidden">
       <div class="voice-bar">
         <div>
-          <div style="font-size:0.84rem; font-weight:700;" id="voiceStatusText">🎤 Voice Mode Ready</div>
-          <div style="font-size:0.74rem; color:#94a3b8;">Bolkar message bhejein ya AI voice reply sunein</div>
+          <div style="font-size:0.84rem; font-weight:700;" id="voiceStatusText">🎤 Voice Mic Ready</div>
+          <div style="font-size:0.74rem; color:#94a3b8;">Mic dabakar bolein ya neeche message bhejein</div>
         </div>
-        <button type="button" id="micToggleBtn" class="send-btn">🎙️ Speak</button>
+        <button type="button" id="micToggleBtn" class="mic-speak-btn">🎙️ Speak</button>
       </div>
     </div>
 
     <div id="videoPanel" class="media-stage hidden">
       <div class="cam-box" id="partnerCamBox">
-        <span id="partnerCamLabel" style="font-size:0.8rem; color:#cbd5e1; font-weight:700; padding:8px;">Stranger Cam Live</span>
-        <span class="cam-tag">Partner</span>
+        <img id="partnerFaceImg" class="partner-face" src="https://randomuser.me/api/portraits/women/44.jpg" alt="Partner" />
+        <span class="cam-live-badge">LIVE</span>
+        <span class="cam-tag" id="partnerCamTag">Partner</span>
       </div>
       <div class="cam-box">
         <video id="localVideoEl" autoplay playsinline muted></video>
