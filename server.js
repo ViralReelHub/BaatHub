@@ -7,37 +7,44 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { maxHttpBufferSize: 5e6, pingTimeout: 60000, pingInterval: 25000 });
 
-const customMedia = { girlPics: [], boyPics: [], gifs: [] };
+// Real Human Face Portraits (Women & Men) + Reaction GIFs
+const realGirlPics = [
+  'https://randomuser.me/api/portraits/women/44.jpg',
+  'https://randomuser.me/api/portraits/women/65.jpg',
+  'https://randomuser.me/api/portraits/women/68.jpg',
+  'https://randomuser.me/api/portraits/women/12.jpg',
+  'https://randomuser.me/api/portraits/women/26.jpg',
+  'https://randomuser.me/api/portraits/women/33.jpg',
+  'https://randomuser.me/api/portraits/women/50.jpg',
+  'https://randomuser.me/api/portraits/women/79.jpg',
+  'https://randomuser.me/api/portraits/women/85.jpg',
+  'https://randomuser.me/api/portraits/women/90.jpg'
+];
+
+const realBoyPics = [
+  'https://randomuser.me/api/portraits/men/32.jpg',
+  'https://randomuser.me/api/portraits/men/45.jpg',
+  'https://randomuser.me/api/portraits/men/22.jpg',
+  'https://randomuser.me/api/portraits/men/11.jpg',
+  'https://randomuser.me/api/portraits/men/54.jpg',
+  'https://randomuser.me/api/portraits/men/67.jpg',
+  'https://randomuser.me/api/portraits/men/75.jpg',
+  'https://randomuser.me/api/portraits/men/83.jpg'
+];
+
+const realGifs = [
+  'https://media.giphy.com/media/3o7abKhOpu0NwenH3O/giphy.gif',
+  'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif',
+  'https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif',
+  'https://media.giphy.com/media/3oriO0OEd9QIDdllqo/giphy.gif'
+];
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/privacy', (req, res) => res.send('<h1>Privacy Policy</h1><a href="/">Back</a>'));
 app.get('/terms', (req, res) => res.send('<h1>Terms</h1><a href="/">Back</a>'));
 
-app.get('/ai-media', (req, res) => {
-  const isGif = req.query.type === 'gif';
-  const name = String(req.query.name || 'User').replace(/[^a-zA-Z0-9 ]/g, '').slice(0, 14);
-  const city = String(req.query.city || 'India').replace(/[^a-zA-Z0-9 ]/g, '').slice(0, 14);
-  const isGirl = req.query.gender === 'girl';
-  const v = parseInt(req.query.v || '0', 10) || 0;
-  const seed = name.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-  res.setHeader('Content-Type', 'image/svg+xml');
-  res.setHeader('Cache-Control', 'no-store');
-
-  if (isGif) {
-    const g = [['😂','KYA BOL RHA H 😂','#ec4899'],['👀','NO WAYYY 👀','#2563eb'],['🙈','CHAL JHOOTHA 🙈','#db2777'],['🔥','VIBE HAI BHAI 🔥','#ea580c']][(seed + v) % 4];
-    return res.send(`<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160"><rect width="240" height="160" rx="16" fill="${g[2]}"/><text x="120" y="82" font-size="52" text-anchor="middle">${g[0]}</text><rect x="30" y="110" width="180" height="28" rx="14" fill="rgba(0,0,0,0.5)"/><text x="120" y="129" fill="#fff" font-family="sans-serif" font-size="12" font-weight="bold" text-anchor="middle">${g[1]}</text></svg>`);
-  }
-  const bg = isGirl ? '#be185d' : '#1d4ed8';
-  const skin = ['#f8cbad', '#eab696', '#d99b78'][seed % 3];
-  const top = isGirl ? ['#f43f5e', '#a855f7', '#38bdf8'][v % 3] : ['#3b82f6', '#10b981', '#f59e0b'][v % 3];
-  const cap = isGirl ? ['abhi ki click 🙈', 'bore ho rhi thi ✨', 'kaisi lag rhi hu? 👀'][v % 3] : ['abhi ki snap 😎', 'full chill mood 🔥', 'kya scene h bhai 👀'][v % 3];
-  const backHair = isGirl ? `<path d="M74 90 C70 155,82 195,92 205 L148 205 C158 195,170 155,166 90 Z" fill="#18181b"/>` : '';
-  res.send(`<svg xmlns="http://www.w3.org/2000/svg" width="240" height="265"><rect width="240" height="265" rx="18" fill="#0f172a"/><rect x="10" y="10" width="220" height="205" rx="14" fill="${bg}"/>${backHair}<path d="M64 215 C66 168,174 168,176 215 Z" fill="${top}"/><rect x="109" y="128" width="22" height="26" rx="10" fill="${skin}"/><ellipse cx="120" cy="94" rx="36" ry="41" fill="${skin}"/><path d="M82 85 C82 48,158 48,158 85 C145 64,95 64,82 85 Z" fill="#18181b"/><circle cx="106" cy="94" r="4" fill="#1e293b"/><circle cx="134" cy="94" r="4" fill="#1e293b"/><path d="M110 112 Q120 121 130 112" fill="none" stroke="#9f1239" stroke-width="2.5"/><rect x="10" y="178" width="220" height="26" fill="rgba(0,0,0,0.5)"/><text x="120" y="195" fill="#fff" font-family="sans-serif" font-size="12" font-weight="600" text-anchor="middle">${cap}</text><text x="18" y="238" fill="#f8fafc" font-family="sans-serif" font-size="13" font-weight="bold">${name} • ${city}</text><text x="18" y="255" fill="#34d399" font-family="sans-serif" font-size="10">● Live Snap</text></svg>`);
-});
-
 let activeModel = null;
-let discoveredModels = [];
-let lastErr = 'None';
+let lastErr = 'No API call yet';
 
 async function tryOneModel(m, key, sys, contents) {
   try {
@@ -65,18 +72,8 @@ async function callAI(key, sys, contents) {
     if (ok) return ok;
     activeModel = null;
   }
-  if (!discoveredModels.length) {
-    try {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
-      const d = await r.json();
-      const bad = ['image', 'tts', 'audio', 'vision', 'embedding', 'aqa', 'robotics', 'computer', 'learnlm', 'bisect'];
-      discoveredModels = (d.models || [])
-        .filter(m => (m.supportedGenerationMethods || []).includes('generateContent') && m.name.includes('gemini') && !bad.some(b => m.name.toLowerCase().includes(b)))
-        .map(m => m.name.replace('models/', ''));
-    } catch (e) { lastErr = `ListModels: ${e.message}`; }
-  }
-  const pool = [...new Set(['gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-3.0-flash', 'gemini-flash-latest', ...discoveredModels])];
-  for (const m of pool.slice(0, 6)) {
+  const models = ['gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-3.0-flash', 'gemini-flash-latest'];
+  for (const m of models) {
     const ok = await tryOneModel(m, key, sys, contents);
     if (ok) { activeModel = m; return ok; }
   }
@@ -94,11 +91,12 @@ const baseOnline = Math.floor(Math.random() * 8) + 25;
 setInterval(() => io.emit('onlineCount', baseOnline + (io.engine.clientsCount || 1) + Math.floor(Math.random() * 4)), 10000);
 
 const personas = [
-  ['Sneha','girl',20,'Delhi'],['Aarav','boy',21,'Mumbai'],['Priya','girl',19,'Jaipur'],['Rohan','boy',22,'Pune'],
-  ['Ananya','girl',20,'Lucknow'],['Kabir','boy',21,'Indore'],['Riya','girl',21,'Chandigarh'],['Dev','boy',20,'Noida'],
-  ['Kavya','girl',19,'Bhopal'],['Aditya','boy',22,'Bengaluru'],['Nidhi','girl',20,'Patna'],['Yash','boy',21,'Ahmedabad'],
-  ['Tanya','girl',21,'Gurugram'],['Karan','boy',23,'Dehradun'],['Simran','girl',20,'Amritsar'],['Harsh','boy',19,'Kanpur']
-].map(([name, gender, age, city]) => ({ name, gender, age, city }));
+  ['Sneha','girl',20,'Delhi',0],['Aarav','boy',21,'Mumbai',0],['Priya','girl',19,'Jaipur',1],['Rohan','boy',22,'Pune',1],
+  ['Ananya','girl',20,'Lucknow',2],['Kabir','boy',21,'Indore',2],['Riya','girl',21,'Chandigarh',3],['Dev','boy',20,'Noida',3],
+  ['Kavya','girl',19,'Bhopal',4],['Aditya','boy',22,'Bengaluru',4],['Nidhi','girl',20,'Patna',5],['Yash','boy',21,'Ahmedabad',5],
+  ['Tanya','girl',21,'Gurugram',6],['Karan','boy',23,'Dehradun',6],['Simran','girl',20,'Amritsar',7],['Harsh','boy',19,'Kanpur',7],
+  ['Meera','girl',22,'Kolkata',8],['Pooja','girl',20,'Varanasi',9]
+].map(([name, gender, age, city, picIdx]) => ({ name, gender, age, city, picIdx }));
 
 const isAbusive = t => /\b(mc|bc|bsdk|madarchod|bhenchod|behenchod|chutiya|chutiye|gandu|randi|harami|kamina|laude|lode|lund|chut|boobs|nude|nudes|sex|sexy|porn|xxx|fuck|fucking|bitch|asshole|dick|pussy|horny)\b/i.test(t);
 let queue = [];
@@ -125,7 +123,7 @@ async function getReply(room, userMsg) {
   const key = (process.env.GEMINI_API_KEY || '').trim();
 
   const canPic = room.count >= 4;
-  const askedPic = /\b(pic|pics|photo|selfie|snaps?|dikhao|dikha|shakal)\b/i.test(userMsg);
+  const askedPic = /\b(pic|pics|photo|selfie|snaps?|dikhao|dikha|shakal|face)\b/i.test(userMsg);
   const askedGif = /\b(gif|meme)\b/i.test(userMsg);
 
   let ai = null;
@@ -149,10 +147,10 @@ Rules: 1. Reply in 1 short casual Hinglish/English line (3-14 words). 2. Remembe
 
   let image = null;
   if ((ai && ai.sendGif) || askedGif) {
-    image = `/ai-media?type=gif&name=${encodeURIComponent(room.persona.name)}&v=${room.media++}&t=${Date.now()}`;
+    image = realGifs[room.media++ % realGifs.length];
   } else if (canPic && ((ai && ai.sendPic) || askedPic)) {
-    const list = isGirl ? customMedia.girlPics : customMedia.boyPics;
-    image = list.length ? list[room.media++ % list.length] : `/ai-media?type=pic&name=${encodeURIComponent(room.persona.name)}&gender=${room.persona.gender}&city=${encodeURIComponent(room.persona.city)}&v=${room.media++}&t=${Date.now()}`;
+    const list = isGirl ? realGirlPics : realBoyPics;
+    image = list[room.persona.picIdx % list.length];
   }
 
   let text = ai?.text || '';
@@ -160,7 +158,7 @@ Rules: 1. Reply in 1 short casual Hinglish/English line (3-14 words). 2. Remembe
     if (askedPic && !canPic) {
       text = isGirl ? 'arey abhi toh baat shuru hui h, pehle jaan pehchan toh ho jaye 😂' : 'itni jaldi kya h bhai, pehle thodi baat toh kr le 😂';
     } else if (image) {
-      text = isGirl ? 'ye lo abhi ki click 🙈' : 'ye le bhai 😎';
+      text = isGirl ? 'ye lo abhi ki pic 🙈' : 'ye le bhai 😎';
     } else {
       const fallbacks = isGirl
         ? ['acha nice yr, waise tum kahan se ho?', 'haha sahi h, aur btao kya chal rha h?', 'abhi clg me ho ya job kr rhe ho?', 'ek truth or dare khelein kya? 🎲']
