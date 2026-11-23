@@ -74,10 +74,13 @@
       color: #0f172a;
       border: none;
       border-radius: 8px;
-      padding: 0 12px;
-      font-size: 1.2rem;
+      padding: 0 10px;
+      height: 40px;
+      font-size: 0.82rem;
+      white-space: nowrap;
+      flex-shrink: 0;
       cursor: pointer;
-      font-weight: bold;
+      font-weight: 700;
       transition: transform 0.15s;
     }
     .dice-btn:active {
@@ -101,7 +104,6 @@
       word-break: break-word;
       line-height: 1.45;
     }
-    /* Clean 320x50 Banner Container (Sirf Lobby Screen Par Center Mein) */
     .ad-banner {
       max-width: 340px;
       margin: 16px auto;
@@ -159,6 +161,7 @@
             <label>Aaj ka Mood / Vibe:</label>
             <div class="mood-tags" id="moodTags">
               <button type="button" class="mood-chip active" data-mood="Any">✨ Koi Bhi</button>
+              <button type="button" class="mood-chip" data-mood="🎲 Truth / Dare">🎲 Truth / Dare</button>
               <button type="button" class="mood-chip" data-mood="😂 Sirf Timepass">😂 Timepass</button>
               <button type="button" class="mood-chip" data-mood="💔 Dil ki Baat">💔 Dil ki Baat</button>
               <button type="button" class="mood-chip" data-mood="📚 Study Stress">📚 Study</button>
@@ -202,7 +205,7 @@
       </article>
     </section>
 
-    <!-- CHAT SCREEN (100% Clean, No Distracting Ads) -->
+    <!-- CHAT SCREEN -->
     <section id="chatSection" class="chat-box hidden">
       <div class="chat-header">
         <div>
@@ -219,7 +222,7 @@
       <div id="messagesContainer" class="messages"></div>
 
       <form id="messageForm" class="message-form">
-        <button type="button" id="diceBtn" class="dice-btn" title="Truth / Dare Sawal Bhejein">🎲</button>
+        <button type="button" id="diceBtn" class="dice-btn" title="Truth / Dare Sawal Bhejein">🎲 T/D</button>
         <input type="text" id="messageInput" placeholder="Apna message likhein..." autocomplete="off" required />
         <button type="submit" class="primary-btn">Send</button>
       </form>
