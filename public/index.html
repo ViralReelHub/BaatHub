@@ -90,7 +90,6 @@
       margin: 8px 0;
       font-style: italic;
     }
-    /* Bade messages ko cut hone se bachane ke liye */
     .msg {
       max-width: 85%;
       word-wrap: break-word;
@@ -101,6 +100,29 @@
       white-space: pre-wrap;
       word-break: break-word;
       line-height: 1.45;
+    }
+    /* Clean 320x50 Banner Container (Sirf Lobby Screen Par Center Mein) */
+    .ad-banner {
+      max-width: 340px;
+      margin: 16px auto;
+      padding: 6px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid #1e293b;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .ad-label {
+      display: block;
+      font-size: 0.65rem;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+      text-align: center;
     }
   </style>
 </head>
@@ -115,11 +137,6 @@
       <button id="vipBtn" class="vip-btn">Go VIP</button>
     </div>
   </header>
-
-  <!-- Monetization Slot 1: Top Banner -->
-  <div class="ad-banner">
-    <span>Advertisement Space (728x90 / Responsive Ad)</span>
-  </div>
 
   <main class="container">
     <!-- LOBBY SCREEN -->
@@ -161,6 +178,21 @@
         </div>
       </div>
 
+      <!-- Clean 320x50 Mobile Banner (Sirf Lobby Screen Par) -->
+      <div class="ad-banner">
+        <span class="ad-label">Sponsored</span>
+        <script>
+          atOptions = {
+            'key' : '12171c8ebf7106fcd14e29bf0da4cf7a',
+            'format' : 'iframe',
+            'height' : 50,
+            'width' : 320,
+            'params' : {}
+          };
+        </script>
+        <script src="https://bicea.org/22/12171c8ebf7106fcd14e29bf0da4cf7a"></script>
+      </div>
+
       <!-- SEO Content Section -->
       <article class="seo-info">
         <h3>BaatHub Kaise Kaam Karta Hai?</h3>
@@ -170,7 +202,7 @@
       </article>
     </section>
 
-    <!-- CHAT SCREEN -->
+    <!-- CHAT SCREEN (100% Clean, No Distracting Ads) -->
     <section id="chatSection" class="chat-box hidden">
       <div class="chat-header">
         <div>
@@ -193,12 +225,6 @@
       </form>
     </section>
   </main>
-
-  <!-- Monetization Slot 2: Bottom Native Banner -->
-  <div class="ad-banner">
-    <script async="async" data-cfasync="false" src="https://bicea.org/21/2818e76c8f9522e098e3cccd6fcf8412"></script>
-    <div id="container-2818e76c8f9522e098e3cccd6fcf8412"></div>
-  </div>
 
   <!-- VIP Subscription Modal -->
   <div id="vipModal" class="modal hidden">
