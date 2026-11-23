@@ -28,15 +28,38 @@ app.get('/sitemap.xml', (req, res) => {
   </urlset>`);
 });
 
-// AI Connection Check Route (Browser mein /test-ai kholkar check karein)
+let cachedModel = 'gemini-3.0-flash';
+
+async function resolveWorkingModel(apiKey) {
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+    const data = await res.json();
+    const models = (data.models || []).filter(m =>
+      (m.supportedGenerationMethods || []).includes('generateContent') &&
+      m.name.includes('gemini')
+    );
+    const preferred =
+      models.find(m => m.name.includes('gemini-3.0-flash')) ||
+      models.find(m => m.name.includes('flash')) ||
+      models[0];
+    if (preferred) {
+      cachedModel = preferred.name.replace('models/', '');
+      return cachedModel;
+    }
+  } catch (e) {}
+  return cachedModel;
+}
+
+// AI Connection Check Route
 app.get('/test-ai', async (req, res) => {
   const apiKey = (process.env.GEMINI_API_KEY || '').trim();
   if (!apiKey) {
-    return res.send('<h2>❌ Error: Render par GEMINI_API_KEY set nahi hai!</h2><p>Render Dashboard > BaatHub > Environment mein jakar GEMINI_API_KEY add karein aur Save Changes dabayein.</p>');
+    return res.send('<h2>❌ Error: Render par GEMINI_API_KEY set nahi hai!</h2>');
   }
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    let model = cachedModel;
+    let response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -45,12 +68,28 @@ app.get('/test-ai', async (req, res) => {
         })
       }
     );
-    const data = await response.json();
+    let data = await response.json();
+
+    if (data.error) {
+      model = await resolveWorkingModel(apiKey);
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: 'Reply in 4 words in Hinglish: aur bhai kya haal' }] }]
+          })
+        }
+      );
+      data = await response.json();
+    }
+
     if (data.error) {
       return res.send(`<h2>❌ Google API Error:</h2><pre>${JSON.stringify(data.error, null, 2)}</pre>`);
     }
     const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || 'Empty response';
-    res.send(`<h2>✅ Real AI Connected & Working!</h2><p><strong>AI Reply:</strong> ${reply}</p><a href="/">Ab Chat Test Karein</a>`);
+    res.send(`<h2>✅ Real AI Connected & Working! (${model})</h2><p><strong>AI Reply:</strong> ${reply}</p><a href="/">Ab Chat Test Karein</a>`);
   } catch (err) {
     res.send(`<h2>❌ Server Error:</h2><p>${err.message}</p>`);
   }
@@ -119,7 +158,7 @@ async function callGeminiModel(modelName, apiKey, systemPrompt, contents) {
         generationConfig: {
           temperature: 1.05,
           topP: 0.95,
-          maxOutputTokens: 180
+          maxOutputTokens: 200
         }
       })
     }
@@ -127,9 +166,10 @@ async function callGeminiModel(modelName, apiKey, systemPrompt, contents) {
   const data = await response.json();
   if (data.error) {
     console.error(`Gemini (${modelName}) Error:`, data.error.message);
-    return null;
+    return { error: true };
   }
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+  return { text };
 }
 
 // Real Gemini AI Conversation Engine
@@ -159,21 +199,22 @@ Rules:
         }
       }
 
-      let aiText = await callGeminiModel('gemini-2.5-flash', apiKey, systemPrompt, contents);
-      if (!aiText) {
-        aiText = await callGeminiModel('gemini-2.0-flash', apiKey, systemPrompt, contents);
+      let result = await callGeminiModel(cachedModel, apiKey, systemPrompt, contents);
+      if (result.error) {
+        const newModel = await resolveWorkingModel(apiKey);
+        result = await callGeminiModel(newModel, apiKey, systemPrompt, contents);
       }
 
-      if (aiText) {
-        history.push({ role: 'ai', text: aiText });
-        return aiText;
+      if (result.text) {
+        history.push({ role: 'ai', text: result.text });
+        return result.text;
       }
     } catch (err) {
       console.error('AI Fetch Error:', err.message);
     }
   }
 
-  // Non-repeating backup pool (har baar alag reply)
+  // Non-repeating backup pool
   const backupReplies = [
     `haha sahi bol rahe ho yaar! waise tum kahan se ho?`,
     `achha ek baat batao, abhi study kar rahe ho ya job?`,
