@@ -3,122 +3,161 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BaatHub - Naye Logon aur Doston se Free Live Chat Karein</title>
+  <title>BaatHub — Chat with Strangers Anonymously</title>
   <link rel="stylesheet" href="style.css" />
   <meta name="google-site-verification" content="b97yk04eTaFznJPeCzro8yAtCjduRo8UcO7ybPjTSjM" />
 </head>
 <body>
-  <header class="navbar">
-    <div class="logo">BaatHub<span>.in</span></div>
-    <div class="nav-right">
-      <div class="online-badge"><span class="pulse-dot"></span><span id="onlineCountText">28 Online</span></div>
-      <button id="vipBtn" class="vip-btn">👑 Go VIP</button>
-    </div>
+  <header class="topbar">
+    <a href="#" id="homeBrand" class="brand">
+      <span class="brand-badge">talk</span>
+      <span class="brand-name">baathub</span>
+    </a>
+    <button id="menuToggle" class="menu-btn" aria-label="Menu">☰</button>
   </header>
 
-  <main class="container">
-    <section id="lobbySection" class="lobby">
-      <h1>Naye Logon ya Doston se Live Baat Karein</h1>
-      <p class="subtitle">Bina login, bina jhanjhat — ek click mein turant chat shuru karein.</p>
+  <nav id="navDrawer" class="drawer hidden">
+    <button id="navTextChat">💬 Text Chat</button>
+    <button id="navPrivateRoom">🔒 Private Room</button>
+    <button id="navVip">👑 VIP & Filters</button>
+    <a href="#guides">📖 Safety Guides</a>
+    <a href="/privacy">Privacy Policy</a>
+    <a href="/terms">Terms of Service</a>
+  </nav>
 
-      <div class="name-box">
-        <label for="usernameInput">Aapka Nickname:</label>
-        <input type="text" id="usernameInput" placeholder="Jaise: Rishu, Priya, ya Guest..." maxlength="20" />
+  <main id="landingView" class="wrap">
+    <section class="hero-card">
+      <div class="preview-chat">
+        <div class="p-bub left">Hey 👋</div>
+        <div class="p-bub right">Hi! Where you from?</div>
+        <div class="p-dots">•••</div>
       </div>
 
-      <div class="cards">
-        <div class="card">
-          <div>
-            <h2>Random Stranger Chat</h2>
-            <p>Apna mood chunein aur turant 1-on-1 live baat karein.</p>
-            <div class="mood-box">
-              <label>Aaj ka Mood / Vibe:</label>
-              <div class="mood-tags" id="moodTags">
-                <button type="button" class="mood-chip active" data-mood="Any">✨ Koi Bhi</button>
-                <button type="button" class="mood-chip" data-mood="🎲 Truth / Dare">🎲 Truth / Dare</button>
-                <button type="button" class="mood-chip" data-mood="😂 Sirf Timepass">😂 Timepass</button>
-                <button type="button" class="mood-chip" data-mood="💔 Dil ki Baat">💔 Dil ki Baat</button>
-                <button type="button" class="mood-chip" data-mood="📚 Study Stress">📚 Study</button>
-              </div>
-            </div>
-          </div>
-          <button id="randomChatBtn" class="primary-btn">Random Chat Shuru Karein</button>
+      <h1 class="hero-title">Chat with <span>Strangers</span></h1>
+
+      <div class="center-col">
+        <div class="live-pill">
+          <span class="live-dot"></span>
+          <span id="landingOnline">540+ people chatting right now</span>
         </div>
 
-        <div class="card">
-          <div>
-            <h2>Friend Private Room</h2>
-            <p>Apna room code banayein aur doston ke saath photos aur chat share karein.</p>
-            <input type="text" id="roomCodeInput" placeholder="Room Code (jaise: DOST123)" maxlength="15" />
+        <div class="mode-switch" id="modeSwitch">
+          <button type="button" class="mode-btn active" data-mode="text">💬 Text</button>
+          <button type="button" class="mode-btn" data-mode="voice">🎤 Voice</button>
+          <button type="button" class="mode-btn" data-mode="video">📹 Video</button>
+        </div>
+
+        <button id="mainStartBtn" class="cta-teal">Start Text Chat →</button>
+      </div>
+
+      <div class="extra-opts">
+        <div class="field-box">
+          <label for="nickInput">Nickname & Mood</label>
+          <input type="text" id="nickInput" placeholder="Apna naam (optional)" maxlength="18" />
+          <div class="chips" id="moodChips" style="margin-top:8px;">
+            <button type="button" class="chip active" data-mood="Any">Any</button>
+            <button type="button" class="chip" data-mood="🎲 Truth / Dare">Truth / Dare</button>
+            <button type="button" class="chip" data-mood="😂 Timepass">Timepass</button>
+            <button type="button" class="chip" data-mood="💔 Dil ki Baat">Dil ki Baat</button>
           </div>
-          <button id="privateChatBtn" class="secondary-btn">Room Join / Create Karein</button>
+        </div>
+
+        <div class="field-box">
+          <label for="roomCodeField">Friend Private Room</label>
+          <input type="text" id="roomCodeField" placeholder="Code (e.g. DOST99)" maxlength="14" />
+          <button type="button" id="joinRoomBtn" class="chip active" style="margin-top:8px; padding:7px 14px;">Join Private Room</button>
         </div>
       </div>
-
-      <div class="ad-banner">
-        <span class="ad-label">Sponsored</span>
-        <script>
-          atOptions = { 'key' : '12171c8ebf7106fcd14e29bf0da4cf7a', 'format' : 'iframe', 'height' : 50, 'width' : 320, 'params' : {} };
-        </script>
-        <script src="https://bicea.org/22/12171c8ebf7106fcd14e29bf0da4cf7a"></script>
-      </div>
-
-      <article class="seo-info">
-        <h3>BaatHub Kaise Kaam Karta Hai?</h3>
-        <p>BaatHub par aap bina account banaye turant naye logon se live baat kar sakte hain, Truth/Dare khel sakte hain, ya Private Room banakar doston ke saath chat aur photos share kar sakte hain.</p>
-      </article>
     </section>
 
-    <section id="chatSection" class="chat-box hidden">
-      <div class="chat-header">
-        <div class="partner-info">
-          <div class="avatar-wrap">
-            <div class="avatar-circle" id="headerAvatar">💬</div>
-            <span class="avatar-dot"></span>
-          </div>
-          <div>
-            <strong id="chatTitle">Connecting...</strong>
-            <small id="typingStatus"></small>
-          </div>
-        </div>
-        <div class="chat-actions">
-          <button id="copyRoomBtn" class="small-btn hidden">Copy</button>
-          <button id="nextStrangerBtn" class="small-btn hidden">Next</button>
-          <button id="leaveChatBtn" class="danger-btn">Leave</button>
-        </div>
-      </div>
-
-      <div class="connected-bar">CONNECTED</div>
-      <div id="messagesContainer" class="messages"></div>
-
-      <form id="messageForm" class="message-form">
-        <input type="file" id="imageInput" accept="image/*" class="hidden" />
-        <button type="button" id="photoBtn" class="icon-btn photo-btn" title="Photo Bhejein">📷</button>
-        <button type="button" id="diceBtn" class="icon-btn dice-btn" title="Truth / Dare">🎲</button>
-        <input type="text" id="messageInput" placeholder="Message..." autocomplete="off" />
-        <button type="submit" class="primary-btn">Send</button>
-      </form>
+    <section class="sec-card">
+      <h2>No signup, instant match</h2>
+      <p>Open browser, pick a mode, and start chatting in seconds. Your identity stays private—no account or app download required to jump into a text conversation.</p>
     </section>
+
+    <section class="sec-card">
+      <h2>baathub vs Chatroulette / Monkey / OmeTV</h2>
+      <p>Here’s how BaatHub compares for quick browser-based stranger chats.</p>
+      <table class="comp-table">
+        <thead>
+          <tr><th>Feature</th><th>baathub</th><th>Monkey</th><th>OmeTV</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Browser chat</td><td class="yes">Yes</td><td class="no">App</td><td class="yes">Yes</td></tr>
+          <tr><td>No signup</td><td class="yes">Yes</td><td class="no">Required</td><td class="yes">Yes</td></tr>
+          <tr><td>AI & mod filter</td><td class="yes">Yes</td><td class="mid">Basic</td><td class="mid">Basic</td></tr>
+          <tr><td>Private rooms</td><td class="yes">Yes</td><td class="no">No</td><td class="no">No</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="guides" class="sec-card">
+      <h2>Why BaatHub is Built for Fast Chat</h2>
+      <p>Practical tips, safety habits, and quick guides for anonymous conversations.</p>
+      <div class="guide-item">
+        <span>📖</span>
+        <h3>How to Talk to Strangers Safely (2026 Guide)</h3>
+        <p>Keep personal details private, use Next anytime, and report abusive behavior immediately.</p>
+        <a href="#faq" class="guide-link">Read guide →</a>
+      </div>
+      <div class="guide-item">
+        <span>📖</span>
+        <h3>Text, Moods & Private Rooms Explained</h3>
+        <p>Switch between random strangers, Truth/Dare icebreakers, or share a code with friends.</p>
+        <a href="#faq" class="guide-link">Read guide →</a>
+      </div>
+    </section>
+
+    <section id="faq" class="sec-card">
+      <h2>Frequently Asked Questions</h2>
+      <div class="faq-list">
+        <details><summary>Is BaatHub free to use?</summary><p>Yes, random text chat and private rooms are free right in your browser.</p></details>
+        <details><summary>Do I need to create an account?</summary><p>No signup is required. Just type a message or hit Start chatting.</p></details>
+        <details><summary>Does it work on mobile browsers?</summary><p>Yes, it is built mobile-first for Android and iPhone browsers.</p></details>
+      </div>
+    </section>
+
+    <div class="footer-grid">
+      <div>
+        <h4>MODES</h4>
+        <a href="#" id="fRandom">Random text chat</a>
+        <a href="#" id="fRoom">Private room</a>
+        <a href="#guides">Safety guides</a>
+      </div>
+      <div>
+        <h4>BAATHUB</h4>
+        <a href="/privacy">Privacy Policy</a>
+        <a href="/terms">Terms of Service</a>
+        <a href="#faq">FAQ</a>
+      </div>
+    </div>
+    <div class="copy-box">&copy; 2026 baathub. All rights reserved.</div>
   </main>
 
-  <div id="vipModal" class="modal hidden">
-    <div class="modal-content">
-      <h2>👑 BaatHub VIP Membership</h2>
-      <ul>
-        <li>✓ 100% Ad-Free Chatting Experience</li>
-        <li>✓ VIP Golden Badge aapke naam ke saath</li>
-        <li>✓ Priority Fast Stranger Matching</li>
-      </ul>
-      <p class="price">Sirf ₹99 / Mahina</p>
-      <button id="payVipBtn" class="primary-btn">Abhi Upgrade Karein</button>
-      <button id="closeVipBtn" class="small-btn">Band Karein</button>
+  <section id="chatView" class="chat-screen hidden">
+    <div class="chat-subbar">
+      <button id="filterPill" class="filter-pill">🔒 Mood / Filter</button>
+      <span id="chatStatusLabel" style="font-size:0.8rem; color:#94a3b8; font-weight:700;">Ready</span>
+      <button id="exitChatBtn" class="filter-pill">Exit</button>
     </div>
-  </div>
 
-  <footer>
-    <a href="/privacy">Privacy Policy</a> | <a href="/terms">Terms & Conditions</a>
-    <p>&copy; 2026 BaatHub. All rights reserved.</p>
-  </footer>
+    <div id="chatStream" class="chat-body">
+      <div id="emptyLobby" class="empty-state">
+        <div class="online-tag" id="roomOnlineTag">540+ online</div>
+        <div class="duo-icons">👤 • 👤</div>
+        <h2 id="emptyHeading">Random Text Chat</h2>
+        <p id="emptySub">Chat anonymously with strangers — no signup</p>
+        <button id="startChatNowBtn" class="start-chat-btn">▶ Start chatting</button>
+      </div>
+    </div>
+
+    <form id="composerForm" class="chat-composer">
+      <input type="file" id="picFile" accept="image/*" class="hidden" />
+      <button type="button" id="picPickBtn" class="icon-act" title="Photo">📷</button>
+      <input type="text" id="msgInput" placeholder="Message" autocomplete="off" />
+      <button type="button" id="nextBtn" class="next-btn">▷| Next</button>
+    </form>
+  </section>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="app.js"></script>
