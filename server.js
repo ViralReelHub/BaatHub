@@ -14,10 +14,10 @@ app.get('/terms', (req, res) => res.send('<h1>Terms - BaatHub</h1><p>Sabhyata ba
 let cachedModel = null;
 let lastError = 'None';
 
-async function callGemini(model, key, sys, contents) {
+async function callGemini(model, key, sys, contents, useThink = true) {
   try {
-    const genConfig = { temperature: 0.95, maxOutputTokens: 180 };
-    if (model === 'gemini-2.5-flash') genConfig.thinkingConfig = { thinkingBudget: 0 };
+    const genConfig = { temperature: 0.95, maxOutputTokens: 250 };
+    if (useThink) genConfig.thinkingConfig = { thinkingBudget: 0 };
 
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
       method: 'POST',
@@ -25,11 +25,16 @@ async function callGemini(model, key, sys, contents) {
       body: JSON.stringify({ systemInstruction: { parts: [{ text: sys }] }, contents, generationConfig: genConfig })
     });
     const data = await res.json();
-    if (!res.ok || data.error) { lastError = `${model}: ${data?.error?.message || res.statusText}`; return null; }
+    if (!res.ok || data.error) {
+      const msg = data?.error?.message || res.statusText;
+      if (useThink && /thinking/i.test(msg)) return callGemini(model, key, sys, contents, false);
+      lastError = `${model}: ${msg}`;
+      return null;
+    }
 
     const raw = (data?.candidates?.[0]?.content?.parts || []).filter(p => !p.thought && p.text).map(p => p.text).join('').trim();
-    const skip = /[SKIP]/i.test(raw);
-    const text = raw.replace(/[SKIP]/gi, '').replace(/^["'*]+|["'*]+$/g, '').trim();
+    const skip = /\[SKIP\]/i.test(raw);
+    const text = raw.replace(/\[SKIP\]/gi, '').replace(/^["'*]+|["'*]+$/g, '').trim();
     if (!text) { lastError = `${model}: Empty`; return null; }
     lastError = null;
     return { text, skip };
@@ -42,18 +47,32 @@ async function askAI(key, sys, contents) {
     if (ok) return ok;
     cachedModel = null;
   }
-  for (const m of ['gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.5-flash']) {
+  const tried = ['gemini-3.0-flash', 'gemini-3-flash-preview', 'gemini-flash-latest', 'gemini-2.5-flash'];
+  for (const m of tried) {
     const ok = await callGemini(m, key, sys, contents);
     if (ok) { cachedModel = m; return ok; }
   }
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+    const d = await r.json();
+    const bad = ['image', 'tts', 'audio', 'vision', 'embedding', 'aqa', 'robotics', 'computer', 'learnlm', 'bisect'];
+    const models = (d.models || [])
+      .filter(m => (m.supportedGenerationMethods || []).includes('generateContent') && m.name.includes('gemini') && !bad.some(b => m.name.toLowerCase().includes(b)))
+      .map(m => m.name.replace('models/', ''))
+      .filter(m => !tried.includes(m));
+    for (const m of models.slice(0, 4)) {
+      const ok = await callGemini(m, key, sys, contents);
+      if (ok) { cachedModel = m; return ok; }
+    }
+  } catch (e) { lastError = e.message; }
   return null;
 }
 
 app.get('/test-ai', async (req, res) => {
   const key = (process.env.GEMINI_API_KEY || '').trim();
   if (!key) return res.send('<h2>GEMINI_API_KEY missing on Render</h2>');
-  const out = await askAI(key, 'Reply in 4 words casually.', [{ role: 'user', parts: [{ text: 'hey' }] }]);
-  res.send(out ? `<h2>✅ Working (${cachedModel})</h2><p>${out.text}</p><a href="/">Back</a>` : `<h2>❌ Error:</h2><pre>${lastError}</pre>`);
+  const out = await askAI(key, 'Reply in 5 words casually in Hinglish.', [{ role: 'user', parts: [{ text: 'aur bhai kya haal' }] }]);
+  res.send(out ? `<h2>✅ Working (${cachedModel})</h2><p>${out.text}</p><a href="/">Back to Chat</a>` : `<h2>❌ Error:</h2><pre>${lastError}</pre>`);
 });
 
 const baseOnline = Math.floor(Math.random() * 8) + 25;
@@ -101,11 +120,12 @@ async function generateReply(room, userMsg) {
     const gRule = isGirl ? 'Use feminine Hindi verbs ("kr rhi hu", "baithi hu").' : 'Use masculine Hindi verbs ("kr rha hu", "baitha hu").';
     const sys = `You are ${room.persona.name}, a ${room.persona.age}yo Indian ${isGirl ? 'girl' : 'boy'} from ${room.persona.city} chatting on BaatHub (mood: ${room.mood}, month: ${month} in India).
 Rules:
-1. Text like a real Indian Gen-Z person on Instagram/WhatsApp: super short, natural, witty replies (3 to 12 words max, 1 line only).
-2. Match the user's language (English -> casual English; Hinglish -> casual lowercase Hinglish like "yr", "hn", "acha", "lol").
-3. REMEMBER everything the user said earlier in the conversation (their name, city, college/work, jokes). Never ask something they already told you!
-4. ${gRule} Never repeat a line you already sent. Never admit you are AI/bot.
-5. If user is rude/creepy/spamming, reply annoyed and add [SKIP] at the end.`;
+1. Text like a real Indian Gen-Z person on Instagram/WhatsApp: super short, natural, witty replies (3 to 14 words max, 1 line only).
+2. Directly reply to what the user just asked or sent (including Truth/Dare questions—answer them playfully like a real human).
+3. Match the user's language (English -> casual English; Hinglish -> casual lowercase Hinglish like "yr", "hn", "acha", "lol").
+4. REMEMBER everything the user said earlier in the conversation (their name, city, college/work, jokes). Never ask something they already told you!
+5. ${gRule} Never repeat a line you already sent. Never admit you are AI/bot.
+6. If user is rude/creepy/spamming, reply annoyed and add [SKIP] at the end.`;
 
     const contents = [];
     for (const h of room.history.slice(-30)) {
@@ -125,9 +145,7 @@ Rules:
 
   const backups = [
     isGirl ? `acha nice yr, waise kya kr rhe ho abhi?` : `acha nice bhai, waise kya kr rha h abhi?`,
-    `can i say something random? 👀`,
     isGirl ? `yahan ${room.persona.city} me toh mast thand ho rhi h` : `yahan ${room.persona.city} me toh mast thand ho rhi h bhai`,
-    `ek truth or dare khelein? neeche dice dabao 🎲`,
     `haha sahi h, aur kya chal rha h life me?`
   ];
   const pick = backups.find(b => !room.used.has(b)) || backups[0];
@@ -287,4 +305,3 @@ io.on('connection', (socket) => {
 });
 
 server.listen(process.env.PORT || 3000, () => console.log('BaatHub live'));
-            
