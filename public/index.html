@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BaatHub — Live Anonymous Chat & 10k+ Community</title>
+  <title>BaatHub — Live Anonymous Chat & AI Assistant</title>
   <link rel="stylesheet" href="style.css" />
   <meta name="google-site-verification" content="b97yk04eTaFznJPeCzro8yAtCjduRo8UcO7ybPjTSjM" />
   <script async="async" data-cfasync="false" src="https://bicea.org/21/2818e76c8f9522e098e3cccd6fcf8412"></script>
@@ -15,12 +15,14 @@
       <span class="brand-name">BaatHub</span>
     </a>
     <div class="top-actions">
+      <button type="button" id="aiAssistTopBtn" class="filter-pill" style="border-color:rgba(167,139,250,0.5); color:#ddd6fe;">✨ AI Assistant</button>
       <button type="button" id="girlModeLockBtn" class="girl-lock-btn">🔒 Girl Mode</button>
       <button type="button" id="menuToggle" class="menu-btn" aria-label="Menu">☰</button>
     </div>
   </header>
 
   <nav id="navDrawer" class="drawer hidden">
+    <button id="navAiAssist">✨ AI Assistant</button>
     <button id="navTextChat">💬 Text Chat</button>
     <button id="navVoiceChat">🎤 Voice Chat</button>
     <button id="navVideoChat">📹 Video Chat</button>
@@ -42,10 +44,11 @@
         <div class="stat-pill">❤️ <span id="landingLoveText">9k love</span></div>
       </div>
 
-      <div class="mode-switch" id="modeSwitch">
+      <div class="mode-switch" id="modeSwitch" style="grid-template-columns: repeat(4, 1fr);">
         <button type="button" class="mode-btn active" data-mode="text">💬 Text</button>
         <button type="button" class="mode-btn" data-mode="voice">🎤 Voice</button>
         <button type="button" class="mode-btn" data-mode="video">📹 Video</button>
+        <button type="button" class="mode-btn" data-mode="ai">✨ AI</button>
       </div>
 
       <button id="mainStartBtn" class="cta-main">Start Text Chat →</button>
@@ -73,18 +76,18 @@
     <div id="container-2818e76c8f9522e098e3cccd6fcf8412" style="margin:14px auto; text-align:center;"></div>
 
     <section class="sec-card">
-      <h2>10k+ people live, zero signup</h2>
-      <p>Jump straight into live conversations with 10k+ people live and 9k love across our community—no account required.</p>
+      <h2>10k+ people live + Smart AI Assistant</h2>
+      <p>Chat live with strangers across Text, Voice, and Video modes, or tap AI Assistant anytime for instant replies, conversation starters, and smart help.</p>
     </section>
 
     <section class="sec-card">
       <h2>BaatHub vs Other Chat Apps</h2>
-      <p>Fast browser chat with Text, Voice, and Video modes, moods, and optional Girl Mode pass.</p>
+      <p>Fast browser chat with Text, Voice, Video, AI Assistant, and optional Girl Mode pass.</p>
       <table class="comp-table">
         <thead><tr><th>Feature</th><th>BaatHub</th><th>Monkey</th><th>OmeTV</th></tr></thead>
         <tbody>
           <tr><td>Text / Voice / Video</td><td class="yes">All 3</td><td class="no">App</td><td class="mid">Limited</td></tr>
-          <tr><td>No signup</td><td class="yes">Yes</td><td class="no">Required</td><td class="yes">Yes</td></tr>
+          <tr><td>Built-in AI Assistant</td><td class="yes">Yes</td><td class="no">No</td><td class="no">No</td></tr>
           <tr><td>Girl Mode pass</td><td class="yes">VIP</td><td class="mid">Paid</td><td class="mid">Paid</td></tr>
           <tr><td>Private rooms</td><td class="yes">Yes</td><td class="no">No</td><td class="no">No</td></tr>
         </tbody>
@@ -94,9 +97,9 @@
     <section id="guides" class="sec-card">
       <h2>Quick Community Guides</h2>
       <div class="guide-item">
-        <span>📖</span>
-        <h3>Text, Voice & Video Modes Guide</h3>
-        <p>Switch seamlessly between Text chat, live Voice recording talk, and Video cam chat anytime.</p>
+        <span>✨</span>
+        <h3>How to Use BaatHub AI Assistant</h3>
+        <p>Select AI mode to ask anything directly, or tap ✨ inside any chat for instant reply ideas.</p>
         <a href="#faq" class="guide-link">Read more →</a>
       </div>
       <div class="guide-item">
@@ -109,7 +112,7 @@
 
     <section id="faq" class="sec-card">
       <h2>Frequently Asked Questions</h2>
-      <details><summary>Are Text, Voice, and Video modes all available?</summary><p>Yes, all three modes are active and you can switch between them inside chat.</p></details>
+      <details><summary>What can the AI Assistant do?</summary><p>It answers your questions directly in Hinglish/English and suggests smart replies during chats.</p></details>
       <details><summary>Why is Girl Mode locked?</summary><p>Girl Mode requires subscription; without it, random matching connects anyone available.</p></details>
     </section>
 
@@ -127,6 +130,7 @@
         <button type="button" class="mini-m-btn active" data-mm="text">Text</button>
         <button type="button" class="mini-m-btn" data-mm="voice">Voice</button>
         <button type="button" class="mini-m-btn" data-mm="video">Video</button>
+        <button type="button" class="mini-m-btn" data-mm="ai">✨ AI</button>
       </div>
       <button type="button" id="exitChatBtn" class="filter-pill">Exit</button>
     </div>
@@ -167,6 +171,7 @@
     <form id="composerForm" class="chat-composer">
       <input type="file" id="picFile" accept="image/*" class="hidden" />
       <button type="button" id="picPickBtn" class="icon-act" title="Photo">📷</button>
+      <button type="button" id="aiSuggestBtn" class="icon-act" title="AI Reply Suggestion">✨</button>
       <input type="text" id="msgInput" placeholder="Message" autocomplete="off" />
       <button type="submit" id="sendMsgBtn" class="send-btn">Send</button>
       <button type="button" id="nextBtn" class="next-btn">Next</button>
